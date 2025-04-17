@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- 背景円 -->
+  <circle cx="256" cy="256" r="240" fill="url(#paint0_linear)" />
+  <circle cx="256" cy="256" r="210" fill="url(#paint1_linear)" />
+  
+  <!-- スニペットを表すドキュメントアイコン -->
+  <path d="M336 128H176C158.3 128 144 142.3 144 160V352C144 369.7 158.3 384 176 384H336C353.7 384 368 369.7 368 352V160C368 142.3 353.7 128 336 128Z" fill="white" fill-opacity="0.9" />
+  
+  <!-- ドキュメントの折れ曲がった角 -->
+  <path d="M336 128H304L368 192V160C368 142.3 353.7 128 336 128Z" fill="#E0E0E0" />
+  <path d="M304 128V176C304 184.8 311.2 192 320 192H368L304 128Z" fill="white" fill-opacity="0.7" />
+  
+  <!-- テキスト行 -->
+  <rect x="176" y="208" width="160" height="16" rx="4" fill="#4285F4" />
+  <rect x="176" y="240" width="120" height="16" rx="4" fill="#4285F4" opacity="0.8" />
+  <rect x="176" y="272" width="140" height="16" rx="4" fill="#4285F4" opacity="0.6" />
+  <rect x="176" y="304" width="100" height="16" rx="4" fill="#4285F4" opacity="0.4" />
+  
+  <!-- 選択ポインター -->
+  <path d="M112 256L152 216V296L112 256Z" fill="white" />
+  
+  <!-- グラデーション定義 -->
+  <defs>
+    <linearGradient id="paint0_linear" x1="86" y1="86" x2="426" y2="426" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#1A73E8" />
+      <stop offset="1" stop-color="#1A237E" />
+    </linearGradient>
+    <linearGradient id="paint1_linear" x1="116" y1="116" x2="396" y2="396" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#2979FF" />
+      <stop offset="1" stop-color="#304FFE" />
+    </linearGradient>
+  </defs>
+</svg>

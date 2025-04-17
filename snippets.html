@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>スニペット選択</title>
+  <style>
+    /* 共通スタイル */
+    body {
+      font-family: 'Segoe UI', Tahoma, sans-serif;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      border-radius: 5px;
+      transition: background-color 0.3s, color 0.3s, border-color 0.3s, box-shadow 0.3s;
+    }
+    
+    .snippet-list {
+      max-height: 400px;
+      overflow-y: auto;
+    }
+    
+    .snippet-item {
+      padding: 10px 15px;
+      cursor: pointer;
+      transition: background-color 0.2s, border-bottom-color 0.2s;
+    }
+    
+    .snippet-title {
+      font-weight: bold;
+      margin-bottom: 5px;
+      transition: color 0.3s;
+    }
+    
+    .snippet-preview {
+      font-size: 0.8em;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      transition: color 0.3s;
+    }
+    
+    /* ライトモード（デフォルト） */
+    body.light-mode {
+      background-color: #f5f5f5;
+      color: #333;
+      border: 1px solid #ccc;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    }
+    
+    body.light-mode .snippet-item {
+      border-bottom: 1px solid #eee;
+    }
+    
+    body.light-mode .snippet-item:hover {
+      background-color: #e0e0e0;
+    }
+    
+    body.light-mode .snippet-title {
+      color: #333;
+    }
+    
+    body.light-mode .snippet-preview {
+      color: #666;
+    }
+    
+    /* ダークモード */
+    body.dark-mode {
+      background-color: #2d2d2d;
+      color: #e0e0e0;
+      border: 1px solid #444;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.4);
+    }
+    
+    body.dark-mode .snippet-item {
+      border-bottom: 1px solid #444;
+    }
+    
+    body.dark-mode .snippet-item:hover {
+      background-color: #3d3d3d;
+    }
+    
+    body.dark-mode .snippet-title {
+      color: #e0e0e0;
+    }
+    
+    body.dark-mode .snippet-preview {
+      color: #aaa;
+    }
+  </style>
+</head>
+<body class="light-mode">
+  <div id="snippets-container" class="snippet-list"></div>
+
+  <script>
+    const { ipcRenderer } = require('electron');
+    
+    // スニペットリストの読み込み
+    ipcRenderer.on('load-snippets', (event, snippets) => {
+      const container = document.getElementById('snippets-container');
+      container.innerHTML = '';
+      
+      snippets.forEach(snippet => {
+        const item = document.createElement('div');
+        item.className = 'snippet-item';
+        
+        const title = document.createElement('div');
+        title.className = 'snippet-title';
+        title.textContent = snippet.title;
+        
+        const preview = document.createElement('div');
+        preview.className = 'snippet-preview';
+        preview.textContent = snippet.content;
+        
+        item.appendChild(title);
+        item.appendChild(preview);
+        
+        item.addEventListener('click', () => {
+          ipcRenderer.send('snippet-selected', snippet.content);
+        });
+        
+        container.appendChild(item);
+      });
+    });
+    
+    // テーマ変更の処理
+    ipcRenderer.on('theme-changed', (event, isDarkMode) => {
+      document.body.classList.remove('light-mode', 'dark-mode');
+      document.body.classList.add(isDarkMode ? 'dark-mode' : 'light-mode');
+    });
+  </script>
+</body>
+</html>

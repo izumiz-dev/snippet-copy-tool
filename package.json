@@ -1,0 +1,42 @@
+{
+  "name": "snippet-copy-tool",
+  "version": "1.0.0",
+  "description": "A tool to select and copy snippets with right-click + key.",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build-icons": "node build-icons.js",
+    "prebuild": "npm run build-icons",
+    "build": "electron-builder",
+    "build:mac": "electron-builder --mac",
+    "build:win": "electron-builder --win",
+    "build:linux": "electron-builder --linux"
+  },
+  "author": "Your Name",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^28.0.0",
+    "electron-builder": "^24.6.4",
+    "jimp": "^0.22.12"
+  },
+  "dependencies": {
+    "clipboardy": "^3.0.0"
+  },
+  "build": {
+    "appId": "com.yourname.snippet-copy-tool",
+    "productName": "Snippet Copy Tool",
+    "mac": {
+      "category": "public.app-category.utilities",
+      "icon": "build/icons"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "build/icons/256x256.png"
+    },
+    "linux": {
+      "target": "AppImage",
+      "category": "Utility",
+      "icon": "build/icons"
+    }
+  }
+}
