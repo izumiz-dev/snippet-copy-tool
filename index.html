@@ -459,7 +459,9 @@
         'ArrowRight': 'Right'
       };
 
-      const keyName = specialKeys[e.key] || e.key;
+      const keyNameRaw = specialKeys[e.key] || e.key;
+      // Convert to uppercase if it's a single character (likely a letter)
+      const keyName = keyNameRaw.length === 1 ? keyNameRaw.toUpperCase() : keyNameRaw;
       shortcut.push(keyName);
 
       const shortcutStr = shortcut.join('+');
