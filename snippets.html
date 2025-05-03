@@ -135,6 +135,19 @@
     body.dark-mode .snippet-preview {
       color: #aaa;
     }
+
+    /* Style for focused elements */
+    .folder-tab.focused,
+    .snippet-item.focused {
+      background-color: rgba(0, 123, 255, 0.2); /* Example focus style */
+      outline: 1px solid rgba(0, 123, 255, 0.5);
+    }
+    body.dark-mode .folder-tab.focused,
+    body.dark-mode .snippet-item.focused {
+       background-color: rgba(0, 123, 255, 0.3);
+       outline: 1px solid rgba(0, 123, 255, 0.7);
+    }
+
   </style>
 </head>
 
@@ -148,6 +161,8 @@
     let currentFolderId = 'none'; // 'none' represents "uncategorized"
     let allSnippets = [];
     let folders = [];
+    let focusedTabIndex = 0;
+    let focusedSnippetIndex = -1; // -1 means no snippet is focused initially
 
     /**
      * Renders folder tabs based on the provided folders array.
@@ -156,14 +171,25 @@
     function renderFolderTabs(folderList) {
       const tabsContainer = document.getElementById('folder-tabs');
       tabsContainer.innerHTML = '';
+      focusedTabIndex = folderList.findIndex(f => f.id === currentFolderId);
+      if (focusedTabIndex === -1 && folderList.length > 0) {
+          focusedTabIndex = 0; // Default to first tab if currentFolderId not found
+          currentFolderId = folderList[0].id;
+      }
 
-      folderList.forEach(folder => {
+
+      folderList.forEach((folder, index) => {
         const tab = document.createElement('div');
-        tab.className = `folder-tab${currentFolderId === folder.id ? ' active' : ''}`;
+        // Add 'focused' class if it's the currently focused tab
+        tab.className = `folder-tab${currentFolderId === folder.id ? ' active' : ''}${index === focusedTabIndex ? ' focused' : ''}`;
         tab.textContent = folder.name;
+        tab.setAttribute('data-folder-id', folder.id); // Add data attribute
         tab.addEventListener('click', () => switchFolder(folder.id));
         tabsContainer.appendChild(tab);
       });
+
+      // Ensure the focused tab is visible
+      ensureVisible(tabsContainer.querySelector('.folder-tab.focused'));
     }
 
     /**
@@ -171,18 +197,29 @@
      * @param {string} folderId - The ID of the folder to switch to.
      */
     function switchFolder(folderId) {
+      // Don't switch if already the current folder
+      if (currentFolderId === folderId) return;
+
       currentFolderId = folderId;
-      
+      focusedTabIndex = folders.findIndex(f => f.id === folderId); // Update focused tab index
+      focusedSnippetIndex = -1; // Reset snippet focus when folder changes
+
       const tabs = document.querySelectorAll('.folder-tab');
-      tabs.forEach(tab => tab.classList.remove('active'));
-      
-      const activeTabIndex = folders.findIndex(f => f.id === folderId);
-      if (activeTabIndex >= 0) {
-        tabs[activeTabIndex].classList.add('active');
-      }
+      tabs.forEach((tab, index) => {
+          tab.classList.remove('active', 'focused');
+          if (tab.getAttribute('data-folder-id') === folderId) {
+              tab.classList.add('active');
+          }
+          if (index === focusedTabIndex) {
+              tab.classList.add('focused');
+          }
+      });
 
       const filteredSnippets = allSnippets.filter(s => s.folderId === currentFolderId);
       renderSnippetList(filteredSnippets);
+
+      // Ensure the newly focused tab is visible
+      ensureVisible(document.querySelector('.folder-tab.focused'));
     }
 
     /**
@@ -192,10 +229,12 @@
     function renderSnippetList(snippets) {
       const container = document.getElementById('snippets-container');
       container.innerHTML = '';
+      focusedSnippetIndex = -1; // Reset focus
 
       snippets.sort((a, b) => (b.lastUsed || 0) - (a.lastUsed || 0));
 
       if (snippets.length === 0) {
+        focusedSnippetIndex = -1; // No snippets to focus
         const emptyMessage = document.createElement('div');
         emptyMessage.className = 'snippet-item';
         emptyMessage.style.textAlign = 'center';
@@ -231,6 +270,56 @@
 
         container.appendChild(item);
       });
+
+      // Set initial focus to the first snippet if available
+      if (snippets.length > 0) {
+        focusedSnippetIndex = 0;
+        updateSnippetFocus();
+      }
+    }
+
+    /**
+     * Updates the visual focus state for snippets.
+     */
+    function updateSnippetFocus() {
+        const items = document.querySelectorAll('.snippet-item');
+        items.forEach((item, index) => {
+            if (index === focusedSnippetIndex) {
+                item.classList.add('focused');
+                ensureVisible(item); // Ensure the focused item is visible
+            } else {
+                item.classList.remove('focused');
+            }
+        });
+    }
+
+    /**
+     * Updates the visual focus state for folder tabs.
+     */
+    function updateTabFocus() {
+        const tabs = document.querySelectorAll('.folder-tab');
+        tabs.forEach((tab, index) => {
+            if (index === focusedTabIndex) {
+                tab.classList.add('focused');
+                ensureVisible(tab); // Ensure the focused tab is visible
+            } else {
+                tab.classList.remove('focused');
+            }
+        });
+        // Also update the active state based on the focused tab's folderId
+        const focusedTab = tabs[focusedTabIndex];
+        if (focusedTab) {
+            switchFolder(focusedTab.getAttribute('data-folder-id'));
+        }
+    }
+
+    /**
+     * Scrolls the container to make the element visible if needed.
+     * @param {HTMLElement} element - The element to make visible.
+     */
+    function ensureVisible(element) {
+        if (!element) return;
+        element.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
     }
 
     /**
@@ -254,6 +343,71 @@
     ipcRenderer.on('theme-changed', (event, isDarkMode) => {
       document.body.classList.remove('light-mode', 'dark-mode');
       document.body.classList.add(isDarkMode ? 'dark-mode' : 'light-mode');
+    });
+
+    // --- Keyboard Navigation ---
+    document.addEventListener('keydown', (event) => {
+        const tabs = document.querySelectorAll('.folder-tab');
+        const snippets = document.querySelectorAll('.snippet-item');
+        const numTabs = tabs.length;
+        const numSnippets = snippets.length;
+
+        // Prevent default scrolling behavior for arrow keys
+        if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)) {
+            event.preventDefault();
+        }
+
+        switch (event.key) {
+            case 'ArrowLeft':
+                if (numTabs > 0) {
+                    focusedTabIndex = (focusedTabIndex - 1 + numTabs) % numTabs;
+                    updateTabFocus();
+                }
+                break;
+            case 'ArrowRight':
+                if (numTabs > 0) {
+                    focusedTabIndex = (focusedTabIndex + 1) % numTabs;
+                    updateTabFocus();
+                }
+                break;
+            case 'ArrowUp':
+                if (numSnippets > 0) {
+                    // If no snippet is focused, focus the last one
+                    if (focusedSnippetIndex === -1) {
+                        focusedSnippetIndex = numSnippets - 1;
+                    } else {
+                        focusedSnippetIndex = (focusedSnippetIndex - 1 + numSnippets) % numSnippets;
+                    }
+                    updateSnippetFocus();
+                }
+                break;
+            case 'ArrowDown':
+                 if (numSnippets > 0) {
+                    // If no snippet is focused, focus the first one
+                    if (focusedSnippetIndex === -1) {
+                        focusedSnippetIndex = 0;
+                    } else {
+                        focusedSnippetIndex = (focusedSnippetIndex + 1) % numSnippets;
+                    }
+                    updateSnippetFocus();
+                }
+                break;
+            case 'Enter':
+                if (focusedSnippetIndex >= 0 && focusedSnippetIndex < numSnippets) {
+                    const focusedSnippet = snippets[focusedSnippetIndex];
+                    const snippetIdStr = focusedSnippet.getAttribute('data-snippet-id');
+                    // Attempt to convert snippetIdStr to a number for comparison, assuming IDs in allSnippets are numbers
+                    const snippetIdNum = parseInt(snippetIdStr, 10); 
+
+                    // Find snippet comparing potentially numeric ID
+                    const snippet = allSnippets.find(s => s.id === snippetIdNum); 
+
+                    if (snippet) {
+                        ipcRenderer.send('snippet-selected', { id: snippet.id, content: snippet.content });
+                    }
+                }
+                break;
+        }
     });
   </script>
 </body>
