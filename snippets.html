@@ -3,8 +3,39 @@
 
 <head>
   <meta charset="UTF-8">
-  <title>スニペット選択</title>
+  <title>Snippet Selection</title>
   <style>
+    .folder-tabs {
+      display: flex;
+      border-bottom: 1px solid #eee;
+      padding: 0 8px;
+      overflow-x: auto;
+      background-color: inherit;
+    }
+
+    .folder-tab {
+      padding: 8px 16px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 150px;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      transition: border-color 0.2s;
+    }
+
+    .folder-tab.active {
+      border-bottom-color: #007bff;
+    }
+
+    body.dark-mode .folder-tabs {
+      border-bottom-color: #444;
+    }
+
+    body.dark-mode .folder-tab.active {
+      border-bottom-color: #007bff;
+    }
+
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', 'Segoe UI', sans-serif;
       margin: 0;
@@ -15,8 +46,18 @@
     }
 
     .snippet-list {
-      max-height: 400px;
+      max-height: 350px;
       overflow-y: auto;
+    }
+
+    .empty-state {
+      padding: 16px;
+      text-align: center;
+      color: var(--text-secondary);
+    }
+
+    .folder-tab.active {
+      background-color: rgba(0, 123, 255, 0.1);
     }
 
     .snippet-item {
@@ -52,6 +93,10 @@
       border-bottom: 1px solid #eee;
     }
 
+    body.light-mode .folder-tab:hover {
+      background-color: rgba(0, 0, 0, 0.05);
+    }
+
     body.light-mode .snippet-item:hover {
       background-color: #e0e0e0;
     }
@@ -75,6 +120,10 @@
       border-bottom: 1px solid #444;
     }
 
+    body.dark-mode .folder-tab:hover {
+      background-color: rgba(255, 255, 255, 0.05);
+    }
+
     body.dark-mode .snippet-item:hover {
       background-color: #3d3d3d;
     }
@@ -90,24 +139,71 @@
 </head>
 
 <body class="light-mode">
+  <div class="folder-tabs" id="folder-tabs"></div>
   <div id="snippets-container" class="snippet-list"></div>
 
   <script>
     const { ipcRenderer } = require('electron');
 
+    let currentFolderId = 'none'; // 'none' represents "uncategorized"
+    let allSnippets = [];
+    let folders = [];
+
     /**
-     * Handles the 'load-snippets' event from the main process.
-     * Renders the received snippets into the snippets container.
-     * @param {Electron.IpcRendererEvent} event - The IPC event object.
-     * @param {Array<object>} snippets - An array of snippet objects.
+     * Renders folder tabs based on the provided folders array.
+     * @param {Array<{id: string, name: string}>} folderList - Array of folder objects.
      */
-    ipcRenderer.on('load-snippets', (event, snippets) => {
+    function renderFolderTabs(folderList) {
+      const tabsContainer = document.getElementById('folder-tabs');
+      tabsContainer.innerHTML = '';
+
+      folderList.forEach(folder => {
+        const tab = document.createElement('div');
+        tab.className = `folder-tab${currentFolderId === folder.id ? ' active' : ''}`;
+        tab.textContent = folder.name;
+        tab.addEventListener('click', () => switchFolder(folder.id));
+        tabsContainer.appendChild(tab);
+      });
+    }
+
+    /**
+     * Switches the current folder and updates the snippet list.
+     * @param {string} folderId - The ID of the folder to switch to.
+     */
+    function switchFolder(folderId) {
+      currentFolderId = folderId;
+      
+      const tabs = document.querySelectorAll('.folder-tab');
+      tabs.forEach(tab => tab.classList.remove('active'));
+      
+      const activeTabIndex = folders.findIndex(f => f.id === folderId);
+      if (activeTabIndex >= 0) {
+        tabs[activeTabIndex].classList.add('active');
+      }
+
+      const filteredSnippets = allSnippets.filter(s => s.folderId === currentFolderId);
+      renderSnippetList(filteredSnippets);
+    }
+
+    /**
+     * Renders the snippet list based on the provided snippets array.
+     * @param {Array<object>} snippets - Array of snippet objects to render.
+     */
+    function renderSnippetList(snippets) {
       const container = document.getElementById('snippets-container');
       container.innerHTML = '';
 
-      // Sort snippets by lastUsed timestamp (descending - most recent first)
-      // Snippets without lastUsed are treated as oldest (timestamp 0)
       snippets.sort((a, b) => (b.lastUsed || 0) - (a.lastUsed || 0));
+
+      if (snippets.length === 0) {
+        const emptyMessage = document.createElement('div');
+        emptyMessage.className = 'snippet-item';
+        emptyMessage.style.textAlign = 'center';
+        emptyMessage.style.color = '#666';
+        emptyMessage.textContent = 'No snippets in this folder';
+        container.appendChild(emptyMessage);
+        return;
+      }
 
       snippets.forEach(snippet => {
         const item = document.createElement('div');
@@ -133,21 +229,31 @@
           ipcRenderer.send('snippet-selected', { id: snippet.id, content: snippet.content });
         });
 
-
         container.appendChild(item);
       });
+    }
+
+    /**
+     * Handles the 'load-snippets' event from the main process.
+     * @param {Electron.IpcRendererEvent} event - The IPC event object.
+     * @param {{snippets: Array<object>, folders: Array<object>}} data - The snippets and folders data.
+     */
+    ipcRenderer.on('load-snippets', (event, data) => {
+      // Convert all folder names to English ("Uncategorized" for 'none')
+      allSnippets = data.snippets;
+      folders = data.folders.map(f => f.id === 'none' ? { ...f, name: 'Uncategorized' } : { ...f });
+      renderFolderTabs(folders);
+      switchFolder(currentFolderId);
     });
 
     /**
      * Handles the 'theme-changed' event from the main process.
-     * Updates the body class to reflect the current theme (light/dark).
      * @param {Electron.IpcRendererEvent} event - The IPC event object.
      * @param {boolean} isDarkMode - True if dark mode is enabled, false otherwise.
      */
     ipcRenderer.on('theme-changed', (event, isDarkMode) => {
       document.body.classList.remove('light-mode', 'dark-mode');
       document.body.classList.add(isDarkMode ? 'dark-mode' : 'light-mode');
-
     });
   </script>
 </body>

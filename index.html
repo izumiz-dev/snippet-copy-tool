@@ -38,16 +38,35 @@
       <div id="snippets" class="tab-content active">
         <div class="snippets-container">
           <aside class="sidebar">
-            <div class="sidebar-header">
-              <div class="sidebar-title">
-                <span class="material-icons">list</span>
-                Snippet List
-                <span id="snippet-count" class="snippet-count">0</span>
+            <div class="sidebar-sections">
+              <div class="sidebar-section">
+                <div class="sidebar-header">
+                  <div class="sidebar-title">
+                    <span class="material-icons">folder</span>
+                    Folders
+                  </div>
+                  <div class="sidebar-controls">
+                    <button id="new-folder" class="icon-button" title="Create folder">
+                      <span class="material-icons">create_new_folder</span>
+                    </button>
+                  </div>
+                </div>
+                <div id="folder-list" class="folder-list"></div>
               </div>
-              <div class="sidebar-controls">
-                <button id="new-snippet" class="icon-button primary" title="Create new snippet">
-                  <span class="material-icons">add</span>
-                </button>
+
+              <div class="sidebar-section">
+                <div class="sidebar-header">
+                  <div class="sidebar-title">
+                    <span class="material-icons">list</span>
+                    Snippet List
+                    <span id="snippet-count" class="snippet-count">0</span>
+                  </div>
+                  <div class="sidebar-controls">
+                    <button id="new-snippet" class="icon-button primary" title="Create new snippet">
+                      <span class="material-icons">add</span>
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -78,6 +97,13 @@
               <div class="form-group">
                 <label for="title">Title</label>
                 <input type="text" id="title" placeholder="Snippet title">
+              </div>
+
+              <div class="form-group">
+                <label for="folder">Folder</label>
+                <select id="folder" class="folder-select">
+                  <option value="none">Uncategorized</option>
+                </select>
               </div>
 
               <div class="form-group" style="flex: 1; display: flex; flex-direction: column;">
@@ -131,18 +157,38 @@
 
   <div id="toast-container" class="toast-container"></div>
 
+  <!-- Folder name input dialog -->
+  <div id="folder-dialog" class="dialog">
+    <div class="dialog-content">
+      <h3 class="dialog-title">Create Folder</h3>
+      <div class="form-group">
+        <label for="folder-name">Folder Name</label>
+        <input type="text" id="folder-name" placeholder="Enter folder name">
+      </div>
+      <div class="dialog-actions">
+        <button id="folder-dialog-cancel" class="button">Cancel</button>
+        <button id="folder-dialog-save" class="button button-primary">Create</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     const { ipcRenderer } = require('electron');
 
     let snippets = [];
+    let folders = [];
     let selectedSnippet = null;
     let settings = { shortcut: 'Alt+S' };
     let currentInput = '';
     let filteredSnippets = [];
     let isDarkMode = false;
+    let currentFolderId = 'none';
 
     const snippetListElement = document.getElementById('snippet-list');
+    const folderListElement = document.getElementById('folder-list');
     const titleInput = document.getElementById('title');
+    const folderSelect = document.getElementById('folder');
+    const newFolderButton = document.getElementById('new-folder');
     const contentInput = document.getElementById('content');
     const contentTitleElement = document.getElementById('content-title');
     const saveButton = document.getElementById('save');
@@ -155,46 +201,53 @@
     const themeIcon = document.getElementById('theme-icon');
     const themeText = document.getElementById('theme-text');
 
+    const folderDialog = document.getElementById('folder-dialog');
+    const folderNameInput = document.getElementById('folder-name');
+    const folderDialogSave = document.getElementById('folder-dialog-save');
+    const folderDialogCancel = document.getElementById('folder-dialog-cancel');
+    let editingFolderId = null;
+
     const tabButtons = document.querySelectorAll('.tab-button');
     const tabContents = document.querySelectorAll('.tab-content');
 
     tabButtons.forEach(button => {
       button.addEventListener('click', () => {
         const tabId = button.getAttribute('data-tab');
-
-        // Toggle active state for tab buttons
         tabButtons.forEach(btn => btn.classList.remove('active'));
         button.classList.add('active');
-
-        // Toggle visibility for tab content
         tabContents.forEach(content => {
-          if (content.id === tabId) {
-            content.style.display = 'block';
-          } else {
-            content.style.display = 'none';
-          }
+          content.style.display = content.id === tabId ? 'block' : 'none';
         });
       });
     });
 
-    /**
-     * Sends a request to the main process to reload snippets.
-     */
+    function showFolderDialog(folder = null) {
+      editingFolderId = folder ? folder.id : null;
+      folderNameInput.value = folder ? folder.name : '';
+      folderDialog.classList.add('show');
+      folderNameInput.focus();
+      folderDialog.querySelector('.dialog-title').textContent = folder ? 'Rename Folder' : 'Create Folder';
+      folderDialogSave.textContent = folder ? 'Rename' : 'Create';
+    }
+
+    function hideFolderDialog() {
+      folderDialog.classList.remove('show');
+      folderNameInput.value = '';
+      editingFolderId = null;
+    }
+
     function reloadSnippets() {
       ipcRenderer.send('get-snippets');
     }
 
-    /**
-     * Renders the list of snippets in the UI.
-     * Uses either the full list or filtered list based on search input.
-     * Displays an empty state message if no snippets are available.
-     */
     function renderSnippetList() {
-      snippetListElement.innerHTML = ''; // Clear existing items
+      snippetListElement.innerHTML = '';
       let snippetsToRender = searchInput.value ? filteredSnippets : snippets;
 
-      // Sort snippets by lastUsed timestamp (descending - most recent first)
-      // Snippets without lastUsed are treated as oldest (timestamp 0)
+      if (currentFolderId !== undefined) {
+        snippetsToRender = snippetsToRender.filter(s => s.folderId === currentFolderId);
+      }
+
       snippetsToRender = [...snippetsToRender].sort((a, b) => (b.lastUsed || 0) - (a.lastUsed || 0));
 
       if (snippetsToRender.length === 0) {
@@ -236,38 +289,28 @@
         snippetListElement.appendChild(item);
       });
 
-      snippetCountElement.textContent = snippets.length;
+      snippetCountElement.textContent = snippetsToRender.length;
     }
 
-    /**
-     * Selects a snippet and updates the editor fields.
-     * @param {object} snippet - The snippet object to select.
-     */
     function selectSnippet(snippet) {
       selectedSnippet = snippet;
       titleInput.value = snippet.title;
       contentInput.value = snippet.content;
+      folderSelect.value = snippet.folderId || 'none';
       contentTitleElement.textContent = snippet.title || 'Edit Snippet';
       renderSnippetList();
     }
 
-    /**
-     * Clears the editor fields to create a new snippet.
-     */
     function createNewSnippet() {
-      selectedSnippet = { id: null, title: '', content: '' };
+      selectedSnippet = { id: null, title: '', content: '', folderId: currentFolderId };
       titleInput.value = '';
       contentInput.value = '';
+      folderSelect.value = currentFolderId || 'none';
       contentTitleElement.textContent = 'New Snippet';
       renderSnippetList();
       titleInput.focus();
     }
 
-    /**
-     * Filters the snippet list based on the provided query.
-     * Updates the rendered list.
-     * @param {string} query - The search query.
-     */
     function filterSnippets(query) {
       if (!query) {
         filteredSnippets = [];
@@ -284,31 +327,14 @@
       renderSnippetList();
     }
 
-    /**
-     * Displays a toast notification message.
-     * @param {string} message - The message to display.
-     * @param {'info' | 'success' | 'error'} [type='info'] - The type of toast.
-     */
     function showToast(message, type = 'info') {
       const toastContainer = document.getElementById('toast-container');
-
       const toast = document.createElement('div');
       toast.className = `toast toast-${type}`;
 
       const icon = document.createElement('span');
       icon.className = 'material-icons';
-
-      switch (type) {
-        case 'success':
-          icon.textContent = 'check_circle';
-          break;
-        case 'error':
-          icon.textContent = 'error';
-          break;
-        default:
-          icon.textContent = 'info';
-      }
-
+      icon.textContent = type === 'success' ? 'check_circle' : type === 'error' ? 'error' : 'info';
       toast.appendChild(icon);
 
       const text = document.createElement('span');
@@ -320,26 +346,110 @@
       setTimeout(() => {
         toast.style.opacity = '0';
         toast.style.transform = 'translateX(100%)';
-        setTimeout(() => {
-          toastContainer.removeChild(toast);
-        }, 300);
+        setTimeout(() => toastContainer.removeChild(toast), 300);
       }, 3000);
     }
 
-    /**
-     * Toggles the color theme between light and dark mode.
-     * Updates the body class and theme toggle button appearance.
-     */
     function toggleTheme() {
       isDarkMode = !isDarkMode;
       document.body.classList.remove('light-mode', 'dark-mode');
       document.body.classList.add(isDarkMode ? 'dark-mode' : 'light-mode');
-
       themeIcon.textContent = isDarkMode ? 'light_mode' : 'dark_mode';
       themeText.textContent = isDarkMode ? 'Switch to light mode' : 'Switch to dark mode';
     }
 
-    // Event Listeners Setup
+    function renderFolderList() {
+      folderListElement.innerHTML = '';
+
+      // Show all folders
+      folders.forEach(folder => {
+        const folderItem = document.createElement('div');
+        folderItem.className = `folder-item${currentFolderId === folder.id ? ' active' : ''}`;
+        folderItem.innerHTML = `
+          <span class="material-icons">folder</span>
+          <span class="folder-name">${folder.id === 'none' ? 'Uncategorized' : folder.name}</span>
+          <div class="folder-actions">
+            <button class="icon-button small move-up-folder" title="Move up">
+              <span class="material-icons">arrow_upward</span>
+            </button>
+            <button class="icon-button small move-down-folder" title="Move down">
+              <span class="material-icons">arrow_downward</span>
+            </button>
+            <button class="icon-button small edit-folder" title="Rename folder">
+              <span class="material-icons">edit</span>
+            </button>
+            ${folder.id !== 'none' ? `
+            <button class="icon-button small delete-folder" title="Delete folder">
+              <span class="material-icons">delete</span>
+            </button>
+            ` : ''}
+          </div>
+        `;
+
+        folderItem.addEventListener('click', () => switchFolder(folder.id));
+
+        const moveUpBtn = folderItem.querySelector('.move-up-folder');
+        const moveDownBtn = folderItem.querySelector('.move-down-folder');
+        const editBtn = folderItem.querySelector('.edit-folder');
+        
+        moveUpBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const index = folders.findIndex(f => f.id === folder.id);
+          if (index > 0) {
+            const newFolders = [...folders];
+            [newFolders[index - 1], newFolders[index]] = [newFolders[index], newFolders[index - 1]];
+            ipcRenderer.send('reorder-folders', newFolders);
+          }
+        });
+
+        moveDownBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const index = folders.findIndex(f => f.id === folder.id);
+          if (index < folders.length - 1) {
+            const newFolders = [...folders];
+            [newFolders[index], newFolders[index + 1]] = [newFolders[index + 1], newFolders[index]];
+            ipcRenderer.send('reorder-folders', newFolders);
+          }
+        });
+
+        editBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          showFolderDialog(folder);
+        });
+
+        if (folder.id !== 'none') {
+          const deleteBtn = folderItem.querySelector('.delete-folder');
+          deleteBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (confirm(`Delete folder "${folder.name}"?\nSnippets in this folder will be moved to "Uncategorized".`)) {
+              ipcRenderer.send('delete-folder', folder.id);
+            }
+          });
+        }
+
+        folderListElement.appendChild(folderItem);
+      });
+    }
+
+    function switchFolder(folderId) {
+      currentFolderId = folderId;
+      renderFolderList();
+      renderSnippetList();
+    }
+
+    function updateFolderSelect() {
+      folderSelect.innerHTML = '';
+      folders.forEach(folder => {
+        const option = document.createElement('option');
+        option.value = folder.id;
+        option.textContent = folder.id === 'none' ? 'Uncategorized' : folder.name;
+        if (selectedSnippet && selectedSnippet.folderId === folder.id) {
+          option.selected = true;
+        }
+        folderSelect.appendChild(option);
+      });
+    }
+
     newSnippetButton.addEventListener('click', createNewSnippet);
 
     saveButton.addEventListener('click', () => {
@@ -352,7 +462,8 @@
       const snippet = {
         id: selectedSnippet ? selectedSnippet.id : null,
         title: titleInput.value.trim(),
-        content: contentInput.value
+        content: contentInput.value,
+        folderId: folderSelect.value || 'none'
       };
 
       ipcRenderer.send('save-snippet', snippet);
@@ -377,20 +488,37 @@
 
     toggleThemeButton.addEventListener('click', toggleTheme);
 
-    // IPC Event Handlers
-    /**
-     * Handles the 'snippets-updated' event from the main process.
-     * Updates the local snippets array, re-sorts, and re-renders the list.
-     * Also handles cases where the currently selected snippet might have been deleted.
-     */
-    ipcRenderer.on('snippets-updated', (event, updatedSnippets) => {
-      snippets = updatedSnippets; // Update the main snippets array
+    newFolderButton.addEventListener('click', () => {
+      showFolderDialog();
+    });
 
-      // Re-filter if search is active, otherwise render the full sorted list
+    folderDialogSave.addEventListener('click', () => {
+      const name = folderNameInput.value.trim();
+      if (name) {
+        const folder = editingFolderId 
+          ? { id: editingFolderId, name }
+          : { name };
+        ipcRenderer.send('save-folder', folder);
+        hideFolderDialog();
+      }
+    });
+
+    folderDialogCancel.addEventListener('click', hideFolderDialog);
+
+    folderNameInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        folderDialogSave.click();
+      } else if (e.key === 'Escape') {
+        hideFolderDialog();
+      }
+    });
+
+    ipcRenderer.on('snippets-updated', (event, updatedSnippets) => {
+      snippets = updatedSnippets;
       if (searchInput.value) {
-        filterSnippets(searchInput.value); // filterSnippets calls renderSnippetList which now sorts
+        filterSnippets(searchInput.value);
       } else {
-        renderSnippetList(); // Render the full list, now sorted
+        renderSnippetList();
       }
 
       if (selectedSnippet) {
@@ -399,34 +527,34 @@
           selectedSnippet = null;
           titleInput.value = '';
           contentInput.value = '';
+          folderSelect.value = 'none';
           contentTitleElement.textContent = 'Select or create a snippet';
         } else {
           const updated = snippets.find(s => s.id === selectedSnippet.id);
           if (updated) {
             titleInput.value = updated.title;
             contentInput.value = updated.content;
+            folderSelect.value = updated.folderId || 'none';
             contentTitleElement.textContent = updated.title;
           }
         }
       }
-
-      renderSnippetList();
     });
 
-    /**
-     * Handles the 'theme-changed' event from the main process.
-     * Updates the UI theme based on the received dark mode status.
-     */
     ipcRenderer.on('theme-changed', (event, darkMode) => {
       isDarkMode = darkMode;
       document.body.classList.remove('light-mode', 'dark-mode');
       document.body.classList.add(isDarkMode ? 'dark-mode' : 'light-mode');
-
       themeIcon.textContent = isDarkMode ? 'light_mode' : 'dark_mode';
       themeText.textContent = isDarkMode ? 'Switch to light mode' : 'Switch to dark mode';
     });
 
-    // Shortcut Settings Elements and Logic
+    ipcRenderer.on('folders-updated', (event, updatedFolders) => {
+      folders = updatedFolders;
+      renderFolderList();
+      updateFolderSelect();
+    });
+
     const shortcutInput = document.getElementById('shortcut-input');
     const clearShortcutButton = document.getElementById('clear-shortcut');
     const resetShortcutButton = document.getElementById('reset-shortcut');
@@ -445,7 +573,6 @@
       }
 
       let shortcut = [];
-
       if (e.ctrlKey) shortcut.push('Ctrl');
       if (e.altKey) shortcut.push('Alt');
       if (e.shiftKey) shortcut.push('Shift');
@@ -460,7 +587,6 @@
       };
 
       const keyNameRaw = specialKeys[e.key] || e.key;
-      // Convert to uppercase if it's a single character (likely a letter)
       const keyName = keyNameRaw.length === 1 ? keyNameRaw.toUpperCase() : keyNameRaw;
       shortcut.push(keyName);
 
@@ -485,14 +611,9 @@
         showToast('Please enter a shortcut', 'error');
         return;
       }
-
       ipcRenderer.send('update-shortcut', currentInput);
     });
 
-    /**
-     * Handles the 'settings-updated' event from the main process.
-     * Updates the local settings object and UI elements displaying the shortcut.
-     */
     ipcRenderer.on('settings-updated', (event, updatedSettings) => {
       settings = updatedSettings;
       currentShortcutSpan.textContent = settings.shortcut;
@@ -500,10 +621,6 @@
       shortcutInput.value = currentInput;
     });
 
-    /**
-     * Handles the 'shortcut-updated' event from the main process.
-     * Shows a toast notification indicating success or failure of the update.
-     */
     ipcRenderer.on('shortcut-updated', (event, result) => {
       if (result.success) {
         showToast(`Shortcut set to "${result.shortcut}"`, 'success');
@@ -512,15 +629,12 @@
       }
     });
 
-    // Keyboard Shortcuts
     document.addEventListener('keydown', (e) => {
-      // Ctrl+N: Create new snippet
       if (e.ctrlKey && e.key === 'n') {
         e.preventDefault();
         createNewSnippet();
       }
 
-      // Ctrl+S: Save current snippet
       if (e.ctrlKey && e.key === 's') {
         e.preventDefault();
         if (selectedSnippet) {
@@ -528,7 +642,6 @@
         }
       }
 
-      // Escape: Clear search input if focused
       if (e.key === 'Escape') {
         if (document.activeElement === searchInput && searchInput.value) {
           searchInput.value = '';
@@ -537,16 +650,13 @@
       }
     });
 
-    /**
-     * Sends a request to the main process to load settings.
-     */
     function loadSettings() {
       ipcRenderer.send('get-settings');
     }
 
-    // Initial Load
     reloadSnippets();
     loadSettings();
+    ipcRenderer.send('get-folders');
   </script>
 </body>
 

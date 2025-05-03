@@ -16,24 +16,30 @@ const {
   ipcMain,
   nativeImage,
   nativeTheme,
-  screen // Added screen here for better access
+  screen
 } = require('electron');
 
 const SNIPPETS_FILE_NAME = 'snippets.json';
+const FOLDERS_FILE_NAME = 'folders.json';
 const SETTINGS_FILE_NAME = 'settings.json';
 const ICON_FILE_NAME = 'icon.png';
 const TRAY_ICON_FILE_NAME = 'tray-icon.png';
 
 const USER_DATA_PATH = app.getPath('userData');
 const SNIPPETS_FILE_PATH = path.join(USER_DATA_PATH, SNIPPETS_FILE_NAME);
+const FOLDERS_FILE_PATH = path.join(USER_DATA_PATH, FOLDERS_FILE_NAME);
 const SETTINGS_FILE_PATH = path.join(USER_DATA_PATH, SETTINGS_FILE_NAME);
 const ICON_PATH = path.join(__dirname, ICON_FILE_NAME);
 const TRAY_ICON_PATH = path.join(__dirname, TRAY_ICON_FILE_NAME);
 
 const DEFAULT_SNIPPETS = [
-  { id: 1, title: 'Greeting', content: 'Thank you for your message.' },
-  { id: 2, title: 'Appreciation', content: 'Thank you for your support.' },
-  { id: 3, title: 'AI Instruction', content: 'Please summarize this content.' }
+  { id: 1, title: 'Greeting', content: 'Thank you for your message.', folderId: 'none' },
+  { id: 2, title: 'Appreciation', content: 'Thank you for your support.', folderId: 'none' },
+  { id: 3, title: 'AI Instruction', content: 'Please summarize this content.', folderId: 'none' }
+];
+
+const DEFAULT_FOLDERS = [
+  { id: 'none', name: 'Uncategorized' }
 ];
 
 const DEFAULT_SETTINGS = {
@@ -88,7 +94,6 @@ function writeJsonFile(filePath, data) {
  */
 function loadSettings() {
   const loaded = readJsonFile(SETTINGS_FILE_PATH, {});
-  // Ensure all default keys exist
   return { ...DEFAULT_SETTINGS, ...loaded };
 }
 
@@ -101,15 +106,41 @@ function saveSettings(settings) {
 }
 
 /**
- * Loads snippets.
- * @returns {Array<object>} An array of snippet objects.
+ * Loads folders from storage.
+ * @returns {Array<object>} An array of folder objects.
  */
-function loadSnippets() {
-  return readJsonFile(SNIPPETS_FILE_PATH, DEFAULT_SNIPPETS);
+function loadFolders() {
+  const folders = readJsonFile(FOLDERS_FILE_PATH, DEFAULT_FOLDERS);
+  // Add 'Uncategorized' folder if it doesn't exist
+  if (!folders.find(f => f.id === 'none')) {
+    folders.unshift({ id: 'none', name: 'Uncategorized' });
+  }
+  return folders;
 }
 
 /**
- * Saves snippets.
+ * Saves folders to storage.
+ * @param {Array<object>} folders - The array of folder objects to save.
+ */
+function saveFolders(folders) {
+  writeJsonFile(FOLDERS_FILE_PATH, folders);
+}
+
+/**
+ * Loads snippets from storage.
+ * @returns {Array<object>} An array of snippet objects.
+ */
+function loadSnippets() {
+  const snippets = readJsonFile(SNIPPETS_FILE_PATH, DEFAULT_SNIPPETS);
+  // Ensure all snippets have folderId property
+  return snippets.map(s => ({
+    ...s,
+    folderId: s.folderId === undefined || s.folderId === null ? 'none' : s.folderId
+  }));
+}
+
+/**
+ * Saves snippets to storage.
  * @param {Array<object>} snippets - The array of snippet objects to save.
  */
 function saveSnippets(snippets) {
@@ -126,11 +157,11 @@ function createMainWindow() {
     height: 600,
     webPreferences: {
       nodeIntegration: true,
-      contextIsolation: false // Consider setting to true for security if possible
+      contextIsolation: false
     },
     title: 'Snippet Management',
     icon: ICON_PATH,
-    show: true // Show immediately
+    show: true
   });
 
   win.loadFile('index.html');
@@ -139,7 +170,6 @@ function createMainWindow() {
     mainWindow = null;
   });
 
-  // Send initial theme state after loading
   win.webContents.on('did-finish-load', () => {
     win.webContents.send('theme-changed', isDarkMode);
   });
@@ -156,31 +186,28 @@ function createSnippetsWindow() {
     width: 300,
     height: 400,
     frame: false,
-    show: false, // Initially hidden
+    show: false,
     alwaysOnTop: true,
-    skipTaskbar: true, // Don't show in taskbar
+    skipTaskbar: true,
     webPreferences: {
       nodeIntegration: true,
-      contextIsolation: false // Consider setting to true for security if possible
+      contextIsolation: false
     },
     icon: ICON_PATH
   });
 
   win.loadFile('snippets.html');
 
-  // Add listener for Escape key to hide the window
   win.webContents.on('before-input-event', (event, input) => {
-    // Check if the key pressed is Escape and the window is visible
     if (input.type === 'keyUp' && input.key === 'Escape' && win.isVisible()) {
       win.hide();
-      event.preventDefault(); // Prevent default behavior if necessary
+      event.preventDefault();
     }
   });
 
-  // Hide the window when it loses focus
   win.on('blur', () => {
     if (win && !win.isDestroyed()) {
-        win.hide();
+      win.hide();
     }
   });
 
@@ -198,13 +225,12 @@ function setupTray() {
   let trayIconImage;
   if (fs.existsSync(TRAY_ICON_PATH)) {
     trayIconImage = nativeImage.createFromPath(TRAY_ICON_PATH);
-    // Use template image for macOS dark mode compatibility
     if (process.platform === 'darwin') {
       trayIconImage.setTemplateImage(true);
     }
   } else {
     console.warn('Tray icon file not found at:', TRAY_ICON_PATH, 'Creating empty icon.');
-    trayIconImage = nativeImage.createEmpty(); // Fallback to empty icon
+    trayIconImage = nativeImage.createEmpty();
   }
 
   tray = new Tray(trayIconImage);
@@ -217,7 +243,7 @@ function setupTray() {
           mainWindow.show();
           mainWindow.focus();
         } else {
-          mainWindow = createMainWindow(); // Recreate if closed
+          mainWindow = createMainWindow();
         }
       }
     },
@@ -229,17 +255,16 @@ function setupTray() {
   tray.setToolTip('Snippet Tool');
   tray.setContextMenu(contextMenu);
 
-  // Optional: Handle tray icon click (e.g., toggle snippets window)
   tray.on('click', () => {
-     if (snippetsWindow && !snippetsWindow.isDestroyed()) {
-         if (snippetsWindow.isVisible()) {
-             snippetsWindow.hide();
-         } else {
-             showSnippetsWindow();
-         }
-     } else {
-         showSnippetsWindow(); // Show even if window was closed/destroyed
-     }
+    if (snippetsWindow && !snippetsWindow.isDestroyed()) {
+      if (snippetsWindow.isVisible()) {
+        snippetsWindow.hide();
+      } else {
+        showSnippetsWindow();
+      }
+    } else {
+      showSnippetsWindow();
+    }
   });
 }
 
@@ -250,38 +275,37 @@ function setupThemeHandling() {
   nativeTheme.on('updated', () => {
     const newIsDarkMode = nativeTheme.shouldUseDarkColors;
     if (newIsDarkMode !== isDarkMode) {
-        isDarkMode = newIsDarkMode;
-        // Notify all relevant windows about the theme change
-        if (mainWindow && !mainWindow.isDestroyed()) {
-            mainWindow.webContents.send('theme-changed', isDarkMode);
-        }
-        if (snippetsWindow && !snippetsWindow.isDestroyed()) {
-            snippetsWindow.webContents.send('theme-changed', isDarkMode);
-        }
+      isDarkMode = newIsDarkMode;
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('theme-changed', isDarkMode);
+      }
+      if (snippetsWindow && !snippetsWindow.isDestroyed()) {
+        snippetsWindow.webContents.send('theme-changed', isDarkMode);
+      }
     }
   });
 }
 
 /**
- * Calculates the optimal position for the snippets window near the cursor
- * and displays the window. Sends necessary data (snippets, theme) to it.
+ * Shows the snippets window at the optimal position near the cursor.
  */
 function showSnippetsWindow() {
   if (!snippetsWindow || snippetsWindow.isDestroyed()) {
-    snippetsWindow = createSnippetsWindow(); // Recreate if needed
-    // Need a slight delay to ensure window is ready for IPC
+    snippetsWindow = createSnippetsWindow();
     setTimeout(() => {
-        if (snippetsWindow && !snippetsWindow.isDestroyed()) {
-            snippetsWindow.webContents.send('load-snippets', loadSnippets());
-            snippetsWindow.webContents.send('theme-changed', isDarkMode);
-        }
-    }, 100); // Adjust delay if needed
+      if (snippetsWindow && !snippetsWindow.isDestroyed()) {
+        const snippets = loadSnippets();
+        const folders = loadFolders();
+        snippetsWindow.webContents.send('load-snippets', { snippets, folders });
+        snippetsWindow.webContents.send('theme-changed', isDarkMode);
+      }
+    }, 100);
   } else {
-      // Window exists, just send data
-      snippetsWindow.webContents.send('load-snippets', loadSnippets());
-      snippetsWindow.webContents.send('theme-changed', isDarkMode);
+    const snippets = loadSnippets();
+    const folders = loadFolders();
+    snippetsWindow.webContents.send('load-snippets', { snippets, folders });
+    snippetsWindow.webContents.send('theme-changed', isDarkMode);
   }
-
 
   const cursorPosition = screen.getCursorScreenPoint();
   const currentDisplay = screen.getDisplayNearestPoint(cursorPosition);
@@ -291,36 +315,29 @@ function showSnippetsWindow() {
   const windowWidth = windowSize[0];
   const windowHeight = windowSize[1];
 
-  // Calculate optimal position (prefer bottom-right of cursor)
   let x = cursorPosition.x + 10;
   let y = cursorPosition.y + 10;
 
-  // Adjust if window goes off-screen horizontally
   if (x + windowWidth > workArea.x + workArea.width) {
-    x = cursorPosition.x - windowWidth - 10; // Move to left
+    x = cursorPosition.x - windowWidth - 10;
   }
-  // Adjust if window goes off-screen vertically
   if (y + windowHeight > workArea.y + workArea.height) {
-    y = cursorPosition.y - windowHeight - 10; // Move above
+    y = cursorPosition.y - windowHeight - 10;
   }
 
-  // Ensure window stays within work area bounds (final check)
   x = Math.max(workArea.x, Math.min(x, workArea.x + workArea.width - windowWidth));
   y = Math.max(workArea.y, Math.min(y, workArea.y + workArea.height - windowHeight));
 
   snippetsWindow.setPosition(x, y);
   snippetsWindow.show();
-  snippetsWindow.focus(); // Ensure it gets focus
+  snippetsWindow.focus();
 }
 
 /**
- * Registers the global shortcut defined in settings.
- * Unregisters any existing shortcuts first.
- * Attempts to register alternative shortcuts if the primary one fails,
- * saving the successful alternative.
+ * Registers the global shortcut for showing the snippets window.
  */
 function registerGlobalShortcut() {
-  globalShortcut.unregisterAll(); // Clear previous shortcuts
+  globalShortcut.unregisterAll();
 
   const settings = loadSettings();
   let shortcutToRegister = settings.shortcut || DEFAULT_SETTINGS.shortcut;
@@ -339,22 +356,19 @@ function registerGlobalShortcut() {
           console.log(`Successfully registered alternative shortcut: ${altShortcut}`);
           settings.shortcut = altShortcut;
           saveSettings(settings);
-          // Notify renderer process about the automatically changed shortcut
           if (mainWindow && !mainWindow.isDestroyed()) {
             mainWindow.webContents.send('settings-updated', settings);
           }
-          shortcutToRegister = altShortcut; // Update the registered shortcut
-          break; // Stop trying alternatives
+          shortcutToRegister = altShortcut;
+          break;
         }
       } catch (altError) {
-          console.error(`Error registering alternative shortcut ${altShortcut}:`, altError);
+        console.error(`Error registering alternative shortcut ${altShortcut}:`, altError);
       }
     }
 
     if (!altSuccess) {
       console.error('Failed to register any shortcut. Please use the tray icon or configure a different shortcut in settings.');
-      // Consider showing a dialog to the user here
-      // dialog.showErrorBox('Shortcut Registration Failed', 'Could not register any global shortcut. Please use the tray icon or configure a different shortcut in the settings.');
     }
   } else {
     console.log(`Successfully registered shortcut: ${shortcutToRegister}`);
@@ -363,79 +377,61 @@ function registerGlobalShortcut() {
 
 app.whenReady().then(() => {
   mainWindow = createMainWindow();
-  snippetsWindow = createSnippetsWindow(); // Create hidden window on startup
+  snippetsWindow = createSnippetsWindow();
   setupTray();
   setupThemeHandling();
-  registerGlobalShortcut(); // Register initial shortcut
+  registerGlobalShortcut();
 
-  // macOS: Recreate window if dock icon is clicked and no windows are open
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       mainWindow = createMainWindow();
-      // Re-create snippets window as well if needed, or ensure it exists
       if (!snippetsWindow || snippetsWindow.isDestroyed()) {
-          snippetsWindow = createSnippetsWindow();
+        snippetsWindow = createSnippetsWindow();
       }
     } else if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.show(); // Show existing main window
+      mainWindow.show();
     }
   });
 });
 
-// Quit when all windows are closed (except on macOS)
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit();
   }
 });
 
-// Unregister shortcuts before quitting
 app.on('will-quit', () => {
   globalShortcut.unregisterAll();
 });
 
-/**
- * Handles the 'snippet-selected' event from the snippets window.
- * Copies the selected snippet content to the clipboard, updates its last used time,
- * saves the snippets, and hides the window.
- * @param {Electron.IpcMainEvent} event - The IPC event object.
- * @param {{id: number, content: string}} selectedSnippet - The selected snippet object containing id and content.
- */
+// IPC Event Handlers
+
 ipcMain.on('snippet-selected', (event, selectedSnippet) => {
   if (!selectedSnippet || typeof selectedSnippet.id === 'undefined' || typeof selectedSnippet.content !== 'string') {
-      console.error('Invalid data received for snippet-selected:', selectedSnippet);
-      return;
+    console.error('Invalid data received for snippet-selected:', selectedSnippet);
+    return;
   }
 
   clipboard.writeText(selectedSnippet.content);
 
-  // Update lastUsed timestamp
   const snippets = loadSnippets();
   const snippetIndex = snippets.findIndex(s => s.id === selectedSnippet.id);
   if (snippetIndex !== -1) {
-      snippets[snippetIndex].lastUsed = Date.now();
-      saveSnippets(snippets); // Save updated snippets with timestamp
+    snippets[snippetIndex].lastUsed = Date.now();
+    saveSnippets(snippets);
 
-      // Optionally notify the main window if it's open
-      if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('snippets-updated', snippets);
-      }
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('snippets-updated', snippets);
+    }
   } else {
-      console.warn(`Snippet with ID ${selectedSnippet.id} not found for timestamp update.`);
+    console.warn(`Snippet with ID ${selectedSnippet.id} not found for timestamp update.`);
   }
-
 
   if (snippetsWindow && !snippetsWindow.isDestroyed()) {
     snippetsWindow.hide();
   }
 });
 
-/**
- * Handles the 'save-snippet' event from the main window.
- * Saves or updates a snippet in the snippets file and notifies the main window.
- * @param {Electron.IpcMainEvent} event - The IPC event object.
- * @param {object} snippet - The snippet object to save (may have null/undefined id for new snippets).
- */
 ipcMain.on('save-snippet', (event, snippet) => {
   const snippets = loadSnippets();
   const existingIndex = snippet.id !== null && snippet.id !== undefined
@@ -443,75 +439,61 @@ ipcMain.on('save-snippet', (event, snippet) => {
     : -1;
 
   if (existingIndex >= 0) {
-    // Update existing snippet
-    snippets[existingIndex] = { ...snippets[existingIndex], ...snippet }; // Merge properties
+    snippets[existingIndex] = { ...snippets[existingIndex], ...snippet };
   } else {
-    // Add new snippet with a new ID
-    // Ensure ID is unique and numeric
     const maxId = snippets.reduce((max, s) => Math.max(max, typeof s.id === 'number' ? s.id : 0), 0);
     snippet.id = maxId + 1;
+    snippet.folderId = snippet.folderId || 'none';
     snippets.push(snippet);
   }
 
   saveSnippets(snippets);
-  // Notify the main window renderer process that snippets have been updated
   if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('snippets-updated', snippets);
+    mainWindow.webContents.send('snippets-updated', snippets);
   }
 });
 
-/**
- * Handles the 'delete-snippet' event from the main window.
- * Deletes a snippet from the snippets file and notifies the main window.
- * @param {Electron.IpcMainEvent} event - The IPC event object.
- * @param {number} snippetId - The ID of the snippet to delete.
- */
 ipcMain.on('delete-snippet', (event, snippetId) => {
   let snippets = loadSnippets();
   snippets = snippets.filter(s => s.id !== snippetId);
   saveSnippets(snippets);
-  // Notify the main window renderer process
   if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('snippets-updated', snippets);
+    mainWindow.webContents.send('snippets-updated', snippets);
   }
 });
 
-/**
- * Handles the 'get-snippets' request from the main window's renderer process.
- * Sends the current list of snippets and theme state back.
- * @param {Electron.IpcMainEvent} event - The IPC event object.
- */
 ipcMain.on('get-snippets', (event) => {
   const snippets = loadSnippets();
   event.sender.send('snippets-updated', snippets);
-  // Send current theme state as well, as the window might have just loaded
   event.sender.send('theme-changed', isDarkMode);
 });
 
-/**
- * Handles the 'get-settings' request from the main window's renderer process.
- * Sends the current settings back.
- * @param {Electron.IpcMainEvent} event - The IPC event object.
- */
+ipcMain.on('get-folders', (event) => {
+  const folders = loadFolders();
+  event.sender.send('folders-updated', folders);
+});
+
+ipcMain.on('reorder-folders', (event, newFolders) => {
+  saveFolders(newFolders);
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('folders-updated', newFolders);
+  }
+  if (snippetsWindow && !snippetsWindow.isDestroyed()) {
+    snippetsWindow.webContents.send('load-snippets', { snippets: loadSnippets(), folders: newFolders });
+  }
+});
+
 ipcMain.on('get-settings', (event) => {
   const settings = loadSettings();
   event.sender.send('settings-updated', settings);
 });
 
-/**
- * Handles the 'update-shortcut' request from the main window's renderer process.
- * Attempts to register the new shortcut. If successful, saves it.
- * If registration fails, attempts to revert to the old shortcut and notifies the renderer.
- * @param {Electron.IpcMainEvent} event - The IPC event object.
- * @param {string} newShortcut - The new shortcut string (e.g., 'Alt+S').
- */
 ipcMain.on('update-shortcut', (event, newShortcut) => {
   const settings = loadSettings();
   const oldShortcut = settings.shortcut || DEFAULT_SETTINGS.shortcut;
   let updateSuccess = false;
-  let finalShortcut = oldShortcut; // Assume failure initially
+  let finalShortcut = oldShortcut;
 
-  // Unregister all shortcuts before trying the new one
   globalShortcut.unregisterAll();
 
   try {
@@ -526,32 +508,74 @@ ipcMain.on('update-shortcut', (event, newShortcut) => {
       finalShortcut = newShortcut;
     } else {
       console.warn(`Failed to register new shortcut: ${newShortcut}. Reverting to ${oldShortcut}.`);
-      // Attempt to re-register the old shortcut
       try {
-          globalShortcut.register(oldShortcut, showSnippetsWindow);
-          console.log(`Successfully re-registered old shortcut: ${oldShortcut}`);
+        globalShortcut.register(oldShortcut, showSnippetsWindow);
+        console.log(`Successfully re-registered old shortcut: ${oldShortcut}`);
       } catch (revertError) {
-          console.error(`Failed to re-register old shortcut ${oldShortcut} after new one failed:`, revertError);
-          // At this point, no shortcut might be registered.
-          finalShortcut = null; // Indicate no shortcut is active
+        console.error(`Failed to re-register old shortcut ${oldShortcut} after new one failed:`, revertError);
+        finalShortcut = null;
       }
     }
   } catch (error) {
     console.error(`Error updating shortcut to ${newShortcut}:`, error);
-    // Attempt to re-register the old shortcut in case of any error during update
     try {
-        globalShortcut.register(oldShortcut, showSnippetsWindow);
-        console.log(`Successfully re-registered old shortcut ${oldShortcut} after error.`);
+      globalShortcut.register(oldShortcut, showSnippetsWindow);
+      console.log(`Successfully re-registered old shortcut ${oldShortcut} after error.`);
     } catch (revertError) {
-        console.error(`Failed to re-register old shortcut ${oldShortcut} after error:`, revertError);
-        finalShortcut = null; // Indicate no shortcut is active
+      console.error(`Failed to re-register old shortcut ${oldShortcut} after error:`, revertError);
+      finalShortcut = null;
     }
   }
 
-  // Notify the renderer of the outcome
   event.sender.send('shortcut-updated', { success: updateSuccess, shortcut: finalShortcut });
-  // Also send the potentially updated settings object
   if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('settings-updated', loadSettings());
+    mainWindow.webContents.send('settings-updated', loadSettings());
+  }
+});
+
+// Folder Management IPC Events
+
+ipcMain.on('save-folder', (event, folder) => {
+  const folders = loadFolders();
+  const existingIndex = folder.id ? folders.findIndex(f => f.id === folder.id) : -1;
+
+  if (existingIndex >= 0) {
+    folders[existingIndex] = folder;
+  } else {
+    const maxId = folders.reduce((max, f) => {
+      if (f.id === 'none') return max;
+      const idNum = parseInt(f.id.slice(1)) || 0;
+      return Math.max(max, idNum);
+    }, 0);
+    folder.id = `f${maxId + 1}`;
+    folders.push(folder);
+  }
+
+  saveFolders(folders);
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('folders-updated', folders);
+  }
+});
+
+ipcMain.on('delete-folder', (event, folderId) => {
+  // Cannot delete the 'Uncategorized' folder
+  if (folderId === 'none') {
+    return;
+  }
+
+  let folders = loadFolders();
+  folders = folders.filter(f => f.id !== folderId);
+  saveFolders(folders);
+
+  // Move snippets in deleted folder to uncategorized
+  const snippets = loadSnippets();
+  const updatedSnippets = snippets.map(s => 
+    s.folderId === folderId ? { ...s, folderId: 'none' } : s
+  );
+  saveSnippets(updatedSnippets);
+
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('folders-updated', folders);
+    mainWindow.webContents.send('snippets-updated', updatedSnippets);
   }
 });

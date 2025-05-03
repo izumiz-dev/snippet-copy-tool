@@ -1,3 +1,44 @@
+.dialog {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 1000;
+  align-items: center;
+  justify-content: center;
+}
+
+.dialog.show {
+  display: flex;
+}
+
+.dialog-content {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 20px;
+  width: 100%;
+  max-width: 400px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.dialog-title {
+  font-size: 18px;
+  font-weight: 500;
+  margin-bottom: 16px;
+  color: var(--text-primary);
+}
+
+.dialog-actions {
+  margin-top: 20px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 * {
   margin: 0;
   padding: 0;
@@ -20,7 +61,6 @@
   --gray-900: #202124;
 }
 
-/* Light theme */
 .light-mode {
   --bg-primary: #ffffff;
   --bg-secondary: var(--gray-100);
@@ -32,7 +72,6 @@
   --danger: #d93025;
 }
 
-/* Dark theme */
 .dark-mode {
   --bg-primary: var(--gray-900);
   --bg-secondary: var(--gray-800);
@@ -144,6 +183,83 @@ body {
   display: flex;
   flex-direction: column;
   background: var(--bg-primary);
+}
+
+.sidebar-sections {
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar-section {
+  border-bottom: 1px solid var(--border-color);
+}
+
+.folder-list {
+  padding: 6px;
+}
+
+.folder-item {
+  padding: 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.folder-item:hover {
+  background: var(--hover-bg);
+}
+
+.folder-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.folder-actions {
+  display: none;
+  gap: 2px;
+}
+
+.folder-item:hover .folder-actions {
+  display: flex;
+}
+
+.folder-item.active {
+  background: var(--hover-bg);
+}
+
+.folder-item:first-child .move-up-folder,
+.folder-item:last-child .move-down-folder {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.icon-button.small {
+  width: 24px;
+  height: 24px;
+}
+
+.icon-button.small .material-icons {
+  font-size: 16px;
+}
+
+.folder-select {
+  width: 100%;
+  padding: 6px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 14px;
+}
+
+.folder-select:focus {
+  outline: none;
+  border-color: var(--text-primary);
 }
 
 .sidebar-header {
@@ -348,7 +464,7 @@ textarea {
 
 .icon-button.primary {
   background: var(--text-primary);
-  border-color: var (--text-primary);
+  border-color: var(--text-primary);
   color: var(--bg-primary);
 }
 
@@ -436,7 +552,7 @@ textarea {
 .empty-state {
   padding: 16px;
   text-align: center;
-  color: var (--text-secondary);
+  color: var(--text-secondary);
 }
 
 .sr-only {
