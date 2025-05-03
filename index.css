@@ -26,7 +26,7 @@
 }
 
 .dialog-title {
-  font-size: 18px;
+  font-size: 17px;
   font-weight: 500;
   margin-bottom: 16px;
   color: var(--text-primary);
@@ -88,7 +88,7 @@ body {
   height: 100%;
   overflow: hidden;
   font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', 'Segoe UI', sans-serif;
-  font-size: 14px;
+  font-size: 13.5px;
   line-height: 1.5;
   color: var(--text-primary);
   background: var(--bg-primary);
@@ -112,7 +112,7 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 20px;
+  font-size: 19px;
   color: var(--text-primary);
 }
 
@@ -132,7 +132,7 @@ body {
   border: none;
   background: none;
   color: var(--text-secondary);
-  font-size: 14px;
+  font-size: 13px;
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -254,7 +254,7 @@ body {
   background: var(--bg-primary);
   color: var(--text-primary);
   font-family: var(--font-sans);
-  font-size: 14px;
+  font-size: 13px;
 }
 
 .folder-select:focus {
@@ -330,7 +330,7 @@ body {
 
 .snippet-item-preview {
   color: var(--text-secondary);
-  font-size: 13px;
+  font-size: 12px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -356,7 +356,7 @@ body {
 }
 
 .editor-title {
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 500;
 }
 
@@ -392,7 +392,7 @@ textarea {
   background: var(--bg-primary);
   color: var(--text-primary);
   font-family: var(--font-sans);
-  font-size: 14px;
+  font-size: 13px;
 }
 
 input[type="text"]:focus,
@@ -413,7 +413,7 @@ textarea {
   border-radius: 4px;
   background: var(--bg-primary);
   color: var(--text-primary);
-  font-size: 14px;
+  font-size: 13px;
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -483,7 +483,7 @@ textarea {
 }
 
 .settings-section-title {
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 500;
   margin-bottom: 16px;
   padding-bottom: 8px;
@@ -501,7 +501,7 @@ textarea {
 
 .settings-option-description {
   color: var(--text-secondary);
-  font-size: 13px;
+  font-size: 12px;
   margin-bottom: 12px;
 }
 
@@ -545,7 +545,7 @@ textarea {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 14px;
+  font-size: 13px;
   transition: all 0.3s ease;
 }
 
