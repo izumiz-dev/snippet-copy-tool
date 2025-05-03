@@ -5,19 +5,16 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "build-icons": "node build-icons.js",
-    "prebuild": "npm run build-icons",
     "build": "electron-builder",
     "build:mac": "electron-builder --mac",
     "build:win": "electron-builder --win",
     "build:linux": "electron-builder --linux"
   },
-  "author": "Your Name",
+  "author": "izumiz-dev",
   "license": "MIT",
   "devDependencies": {
     "electron": "^28.0.0",
-    "electron-builder": "^24.6.4",
-    "jimp": "^0.22.12"
+    "electron-builder": "^24.6.4"
   },
   "dependencies": {
     "clipboardy": "^3.0.0"
@@ -27,16 +24,16 @@
     "productName": "Snippet Copy Tool",
     "mac": {
       "category": "public.app-category.utilities",
-      "icon": "build/icons"
+      "icon": "icon.png"
     },
     "win": {
       "target": "nsis",
-      "icon": "build/icons/256x256.png"
+      "icon": "icon.ico"
     },
     "linux": {
       "target": "AppImage",
       "category": "Utility",
-      "icon": "build/icons"
+      "icon": "icon.png"
     }
   }
 }

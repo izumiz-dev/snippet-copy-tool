@@ -23,14 +23,12 @@ const SNIPPETS_FILE_NAME = 'snippets.json';
 const FOLDERS_FILE_NAME = 'folders.json';
 const SETTINGS_FILE_NAME = 'settings.json';
 const ICON_FILE_NAME = 'icon.png';
-const TRAY_ICON_FILE_NAME = 'tray-icon.png';
 
 const USER_DATA_PATH = app.getPath('userData');
 const SNIPPETS_FILE_PATH = path.join(USER_DATA_PATH, SNIPPETS_FILE_NAME);
 const FOLDERS_FILE_PATH = path.join(USER_DATA_PATH, FOLDERS_FILE_NAME);
 const SETTINGS_FILE_PATH = path.join(USER_DATA_PATH, SETTINGS_FILE_NAME);
 const ICON_PATH = path.join(__dirname, ICON_FILE_NAME);
-const TRAY_ICON_PATH = path.join(__dirname, TRAY_ICON_FILE_NAME);
 
 const DEFAULT_SNIPPETS = [
   { id: 1, title: 'Greeting', content: 'Thank you for your message.', folderId: 'none' },
@@ -223,13 +221,17 @@ function createSnippetsWindow() {
  */
 function setupTray() {
   let trayIconImage;
-  if (fs.existsSync(TRAY_ICON_PATH)) {
-    trayIconImage = nativeImage.createFromPath(TRAY_ICON_PATH);
+  try {
+    const originalIcon = nativeImage.createFromPath(ICON_PATH);
+    // Resize the icon for the tray. 16x16 is a common size.
+    trayIconImage = originalIcon.resize({ width: 16, height: 16 });
+    // On macOS, using template images is recommended for menu bar icons.
     if (process.platform === 'darwin') {
       trayIconImage.setTemplateImage(true);
     }
-  } else {
-    console.warn('Tray icon file not found at:', TRAY_ICON_PATH, 'Creating empty icon.');
+  } catch (error) {
+    console.error('Error creating tray icon from:', ICON_PATH, error);
+    // Fallback to an empty image if loading or resizing fails
     trayIconImage = nativeImage.createEmpty();
   }
 
