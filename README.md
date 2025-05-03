@@ -1,28 +1,31 @@
 # Snippet Copy Tool
 
-Snippet Copy Tool is a desktop application that allows you to easily manage frequently used text snippets and copy them anywhere. It is especially useful for streamlining repetitive input in AI chats and development work.
+Snippet Copy Tool is a cross-platform desktop application for managing and quickly copying frequently used text snippets. It is especially useful for streamlining repetitive input in AI chats, development, and daily work.
 
 ## Features
 
 - **Snippet Management**: Add, edit, and delete text snippets with titles and content.
-- **Customizable Shortcuts**: Freely set the shortcut key to display the snippet selection window (default: Alt+S).
-- **Popup Selection**: The snippet selection window appears at the mouse cursor position.
+- **Customizable Shortcut**: Set your preferred global shortcut key to open the snippet selector window (default: Alt+S). If the shortcut is unavailable, alternatives are automatically tried.
+- **Popup Selector**: The snippet selector window appears at the mouse cursor position for quick access.
 - **Clipboard Integration**: Selected snippets are automatically copied to the clipboard.
-- **System Tray Resident**: Runs in the background and appears only when needed.
-- **Dark Mode Support**: Automatically switches according to the system theme.
+- **System Tray**: Runs in the background and is accessible from the system tray icon.
+- **Dark Mode Support**: Automatically switches between light and dark mode according to the system theme.
+- **Persistent Data**: Snippets and settings are saved in your user data directory and persist after restart.
+- **Simple UI**: Intuitive interface with tabs for snippet management and settings.
+- **Search**: Quickly filter snippets by title or content.
 
 ## Usage
 
-1. **Launch the App**: When you start the application, the snippet management screen appears and an icon is shown in the system tray.
-2. **Manage Snippets**: You can add, edit, and delete snippets on the management screen.
-3. **Select Snippet**: Press the configured shortcut key (default: Alt+S) or right-click the system tray icon and select "Show Snippet Selector" to display the snippet selection window at the cursor position.
-4. **Copy and Paste Snippet**: When you select a snippet, it is copied to the clipboard. You can paste it anywhere with "Ctrl+V" (or "Command+V" on Mac).
+1. **Launch the App**: Start the application. The snippet management window appears, and an icon is shown in the system tray.
+2. **Manage Snippets**: Add, edit, or delete snippets in the management window.
+3. **Select Snippet**: Press the configured shortcut key (default: Alt+S) or use the tray icon menu to open the snippet selector at the mouse cursor position.
+4. **Copy and Paste**: Selecting a snippet copies it to the clipboard. Paste it anywhere with Ctrl+V (or Command+V on Mac).
 
 ## Installation
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/snippet-copy-tool.git
+git clone https://github.com/izumiz-dev/snippet-copy-tool.git
 cd snippet-copy-tool
 
 # Install dependencies
@@ -69,28 +72,32 @@ snippet-copy-tool/
 ├── build-icons.js    # Icon generation script
 ├── icon.png          # Main app icon
 ├── index.html        # Snippet management and settings UI
-├── main.js           # Main process
+├── index.css         # Main UI styles
+├── main.js           # Electron main process
 ├── package.json      # Project settings
-├── snippets.html     # Snippet selection popup
+├── snippets.html     # Snippet selector popup
 └── tray-icon.png     # System tray icon
 ```
 
 ## Main Features
 
 ### 1. Cross-Platform Support
-Designed to work on Windows, macOS, and Linux.
+Works on Windows, macOS, and Linux.
 
 ### 2. Dark Mode Support
-Automatically switches between light and dark modes according to the system theme.
+Follows your system's light/dark mode automatically.
 
 ### 3. Persistent Settings
-Snippets and shortcut settings are saved in the user's application data directory and persist after restarting the app.
+Snippets and shortcut settings are saved and persist after restarting the app.
 
 ### 4. Simple Interface
-Intuitive UI design allows you to start using it immediately without special knowledge. Tabs switch between snippet management and settings.
+Easy-to-use UI with tabs for snippet management and settings.
 
 ### 5. Shortcut Customization
-You can freely customize the shortcut key to display the snippet selection window from the settings screen. Just enter the key combination to change it.
+Customize the global shortcut key from the settings tab. If the chosen shortcut is unavailable, alternatives are tried and saved automatically.
+
+### 6. Search
+Filter snippets by title or content in real time.
 
 ## Limitations
 
@@ -98,12 +105,12 @@ You can freely customize the shortcut key to display the snippet selection windo
 - File attachments and rich text are not supported
 - Categories and tags are not implemented
 
-## Future Enhancements
+## Planned Enhancements
 
 - Snippet categorization
-- Template feature (variable replacement)
+- Template/variable replacement
 - Cloud sync
-- Search functionality
+- More advanced search
 
 ## License
 

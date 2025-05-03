@@ -1,368 +1,525 @@
-// electron.jsのメインプロセス側のコード (main.js)
-const { app, BrowserWindow, globalShortcut, clipboard, Tray, Menu, ipcMain, nativeImage, nativeTheme } = require('electron');
+/**
+ * @file Electron main process script for the Snippet Copy Tool.
+ * Handles application lifecycle, window management, global shortcuts,
+ * data storage (snippets and settings), IPC communication, and system tray integration.
+ */
 const path = require('path');
 const fs = require('fs');
 
-let mainWindow;
-let tray;
-let snippetsWindow;
+const {
+  app,
+  BrowserWindow,
+  globalShortcut,
+  clipboard,
+  Tray,
+  Menu,
+  ipcMain,
+  nativeImage,
+  nativeTheme,
+  screen // Added screen here for better access
+} = require('electron');
 
-// システムテーマの状態をグローバル変数として保持
-let isDarkMode = nativeTheme.shouldUseDarkColors;
+const SNIPPETS_FILE_NAME = 'snippets.json';
+const SETTINGS_FILE_NAME = 'settings.json';
+const ICON_FILE_NAME = 'icon.png';
+const TRAY_ICON_FILE_NAME = 'tray-icon.png';
 
-// データの保存先
-const snippetsFilePath = path.join(app.getPath('userData'), 'snippets.json');
-const settingsFilePath = path.join(app.getPath('userData'), 'settings.json');
+const USER_DATA_PATH = app.getPath('userData');
+const SNIPPETS_FILE_PATH = path.join(USER_DATA_PATH, SNIPPETS_FILE_NAME);
+const SETTINGS_FILE_PATH = path.join(USER_DATA_PATH, SETTINGS_FILE_NAME);
+const ICON_PATH = path.join(__dirname, ICON_FILE_NAME);
+const TRAY_ICON_PATH = path.join(__dirname, TRAY_ICON_FILE_NAME);
 
-// デフォルト設定
-const defaultSettings = {
+const DEFAULT_SNIPPETS = [
+  { id: 1, title: 'Greeting', content: 'Thank you for your message.' },
+  { id: 2, title: 'Appreciation', content: 'Thank you for your support.' },
+  { id: 3, title: 'AI Instruction', content: 'Please summarize this content.' }
+];
+
+const DEFAULT_SETTINGS = {
   shortcut: 'Alt+S'
 };
 
-// 設定データの読み込み
-function loadSettings() {
-  try {
-    if (fs.existsSync(settingsFilePath)) {
-      const data = fs.readFileSync(settingsFilePath, 'utf8');
-      return { ...defaultSettings, ...JSON.parse(data) };
-    }
-  } catch (error) {
-    console.error('Error loading settings:', error);
-  }
-  return defaultSettings;
-}
+const ALTERNATIVE_SHORTCUTS = ['Ctrl+Shift+Space', 'Alt+Shift+S', 'Ctrl+Alt+S', 'Alt+Z', 'Ctrl+Alt+Z'];
 
-// 設定データの保存
-function saveSettings(settings) {
-  try {
-    fs.writeFileSync(settingsFilePath, JSON.stringify(settings, null, 2), 'utf8');
-  } catch (error) {
-    console.error('Error saving settings:', error);
-  }
-}
+/** @type {BrowserWindow | null} The main application window instance. */
+let mainWindow = null;
+/** @type {BrowserWindow | null} The snippet selection popup window instance. */
+let snippetsWindow = null;
+/** @type {Tray | null} The system tray icon instance. */
+let tray = null;
+/** @type {boolean} Stores the current system theme state (dark or light). */
+let isDarkMode = nativeTheme.shouldUseDarkColors;
 
-// スニペットデータの読み込み
-function loadSnippets() {
+/**
+ * Reads data from a JSON file safely.
+ * @param {string} filePath - The path to the JSON file.
+ * @param {*} defaultValue - The value to return if reading fails or file doesn't exist.
+ * @returns {*} The parsed JSON data or the default value.
+ */
+function readJsonFile(filePath, defaultValue) {
   try {
-    if (fs.existsSync(snippetsFilePath)) {
-      const data = fs.readFileSync(snippetsFilePath, 'utf8');
+    if (fs.existsSync(filePath)) {
+      const data = fs.readFileSync(filePath, 'utf8');
       return JSON.parse(data);
     }
   } catch (error) {
-    console.error('Error loading snippets:', error);
+    console.error(`Error reading JSON file at ${filePath}:`, error);
   }
-  // Default snippets
-  return [
-    { id: 1, title: 'Greeting', content: 'Thank you for your message.' },
-    { id: 2, title: 'Appreciation', content: 'Thank you for your support.' },
-    { id: 3, title: 'AI Instruction', content: 'Please summarize this content.' }
-  ];
+  return defaultValue;
 }
 
-// スニペットデータの保存
-function saveSnippets(snippets) {
+/**
+ * Writes data to a JSON file safely.
+ * @param {string} filePath - The path to the JSON file.
+ * @param {*} data - The data to write.
+ */
+function writeJsonFile(filePath, data) {
   try {
-    fs.writeFileSync(snippetsFilePath, JSON.stringify(snippets, null, 2), 'utf8');
+    fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8');
   } catch (error) {
-    console.error('Error saving snippets:', error);
+    console.error(`Error writing JSON file to ${filePath}:`, error);
   }
 }
 
-function createWindow() {
-  // メイン管理ウィンドウ
-  mainWindow = new BrowserWindow({
+/**
+ * Loads application settings.
+ * @returns {object} The loaded settings object merged with defaults.
+ */
+function loadSettings() {
+  const loaded = readJsonFile(SETTINGS_FILE_PATH, {});
+  // Ensure all default keys exist
+  return { ...DEFAULT_SETTINGS, ...loaded };
+}
+
+/**
+ * Saves application settings.
+ * @param {object} settings - The settings object to save.
+ */
+function saveSettings(settings) {
+  writeJsonFile(SETTINGS_FILE_PATH, settings);
+}
+
+/**
+ * Loads snippets.
+ * @returns {Array<object>} An array of snippet objects.
+ */
+function loadSnippets() {
+  return readJsonFile(SNIPPETS_FILE_PATH, DEFAULT_SNIPPETS);
+}
+
+/**
+ * Saves snippets.
+ * @param {Array<object>} snippets - The array of snippet objects to save.
+ */
+function saveSnippets(snippets) {
+  writeJsonFile(SNIPPETS_FILE_PATH, snippets);
+}
+
+/**
+ * Creates the main application window.
+ * @returns {BrowserWindow} The created main window instance.
+ */
+function createMainWindow() {
+  const win = new BrowserWindow({
     width: 800,
     height: 600,
     webPreferences: {
       nodeIntegration: true,
-      contextIsolation: false
+      contextIsolation: false // Consider setting to true for security if possible
     },
     title: 'Snippet Management',
-    icon: path.join(__dirname, 'icon.png')
+    icon: ICON_PATH,
+    show: true // Show immediately
   });
 
-  mainWindow.loadFile('index.html');
-  
-  // スニペットの選択ウィンドウ（初期状態は非表示）
-  snippetsWindow = new BrowserWindow({
+  win.loadFile('index.html');
+
+  win.on('closed', () => {
+    mainWindow = null;
+  });
+
+  // Send initial theme state after loading
+  win.webContents.on('did-finish-load', () => {
+    win.webContents.send('theme-changed', isDarkMode);
+  });
+
+  return win;
+}
+
+/**
+ * Creates the hidden snippet selection window.
+ * @returns {BrowserWindow} The created snippets window instance.
+ */
+function createSnippetsWindow() {
+  const win = new BrowserWindow({
     width: 300,
     height: 400,
     frame: false,
-    show: false,
+    show: false, // Initially hidden
     alwaysOnTop: true,
+    skipTaskbar: true, // Don't show in taskbar
     webPreferences: {
       nodeIntegration: true,
-      contextIsolation: false
+      contextIsolation: false // Consider setting to true for security if possible
     },
-    icon: path.join(__dirname, 'icon.png')
-  });
-  
-  snippetsWindow.loadFile('snippets.html');
-  
-  // スニペットウィンドウが閉じられないようにする
-  snippetsWindow.on('blur', () => {
-    snippetsWindow.hide();
+    icon: ICON_PATH
   });
 
-  // システムトレイのセットアップ
-  let trayIcon;
-  
-  // トレイアイコンの読み込み（ファイルが存在する場合）
-  const trayIconPath = path.join(__dirname, 'tray-icon.png');
-  if (fs.existsSync(trayIconPath)) {
-    trayIcon = nativeImage.createFromPath(trayIconPath);
+  win.loadFile('snippets.html');
+
+  // Hide the window when it loses focus
+  win.on('blur', () => {
+    if (win && !win.isDestroyed()) {
+        win.hide();
+    }
+  });
+
+  win.on('closed', () => {
+    snippetsWindow = null;
+  });
+
+  return win;
+}
+
+/**
+ * Sets up the system tray icon and context menu.
+ */
+function setupTray() {
+  let trayIconImage;
+  if (fs.existsSync(TRAY_ICON_PATH)) {
+    trayIconImage = nativeImage.createFromPath(TRAY_ICON_PATH);
+    // Use template image for macOS dark mode compatibility
     if (process.platform === 'darwin') {
-      trayIcon = trayIcon.template = true; // macOS用テンプレートアイコン
+      trayIconImage.setTemplateImage(true);
     }
   } else {
-    // トレイアイコンがない場合は空のアイコンを作成
-    trayIcon = nativeImage.createEmpty();
+    console.warn('Tray icon file not found at:', TRAY_ICON_PATH, 'Creating empty icon.');
+    trayIconImage = nativeImage.createEmpty(); // Fallback to empty icon
   }
-  
-  tray = new Tray(trayIcon);
-  
+
+  tray = new Tray(trayIconImage);
+
   const contextMenu = Menu.buildFromTemplate([
-    { label: 'Open Snippet Manager', click: () => mainWindow.show() },
+    {
+      label: 'Open Snippet Manager',
+      click: () => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.show();
+          mainWindow.focus();
+        } else {
+          mainWindow = createMainWindow(); // Recreate if closed
+        }
+      }
+    },
     { label: 'Show Snippet Selector', click: showSnippetsWindow },
     { type: 'separator' },
     { label: 'Quit', click: () => app.quit() }
   ]);
-  
+
   tray.setToolTip('Snippet Tool');
   tray.setContextMenu(contextMenu);
-  
-  // グローバルショートカットの登録
-  registerGlobalShortcut();
-  
-  // テーマ変更時の処理
+
+  // Optional: Handle tray icon click (e.g., toggle snippets window)
+  tray.on('click', () => {
+     if (snippetsWindow && !snippetsWindow.isDestroyed()) {
+         if (snippetsWindow.isVisible()) {
+             snippetsWindow.hide();
+         } else {
+             showSnippetsWindow();
+         }
+     } else {
+         showSnippetsWindow(); // Show even if window was closed/destroyed
+     }
+  });
+}
+
+/**
+ * Sets up handling for system theme changes (dark/light mode).
+ */
+function setupThemeHandling() {
   nativeTheme.on('updated', () => {
-    isDarkMode = nativeTheme.shouldUseDarkColors;
-    // すべてのウィンドウにテーマ変更を通知
-    mainWindow.webContents.send('theme-changed', isDarkMode);
-    if (snippetsWindow && !snippetsWindow.isDestroyed()) {
-      snippetsWindow.webContents.send('theme-changed', isDarkMode);
+    const newIsDarkMode = nativeTheme.shouldUseDarkColors;
+    if (newIsDarkMode !== isDarkMode) {
+        isDarkMode = newIsDarkMode;
+        // Notify all relevant windows about the theme change
+        if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('theme-changed', isDarkMode);
+        }
+        if (snippetsWindow && !snippetsWindow.isDestroyed()) {
+            snippetsWindow.webContents.send('theme-changed', isDarkMode);
+        }
     }
   });
 }
 
-// スニペット選択ウィンドウを表示
+/**
+ * Calculates the optimal position for the snippets window near the cursor
+ * and displays the window. Sends necessary data (snippets, theme) to it.
+ */
 function showSnippetsWindow() {
-  // マウスカーソルの位置を取得
-  const { screen } = require('electron');
+  if (!snippetsWindow || snippetsWindow.isDestroyed()) {
+    snippetsWindow = createSnippetsWindow(); // Recreate if needed
+    // Need a slight delay to ensure window is ready for IPC
+    setTimeout(() => {
+        if (snippetsWindow && !snippetsWindow.isDestroyed()) {
+            snippetsWindow.webContents.send('load-snippets', loadSnippets());
+            snippetsWindow.webContents.send('theme-changed', isDarkMode);
+        }
+    }, 100); // Adjust delay if needed
+  } else {
+      // Window exists, just send data
+      snippetsWindow.webContents.send('load-snippets', loadSnippets());
+      snippetsWindow.webContents.send('theme-changed', isDarkMode);
+  }
+
+
   const cursorPosition = screen.getCursorScreenPoint();
-  
-  // 現在のスクリーン情報を取得
   const currentDisplay = screen.getDisplayNearestPoint(cursorPosition);
   const workArea = currentDisplay.workArea;
-  
-  // スニペットウィンドウのサイズを取得
+
   const windowSize = snippetsWindow.getSize();
   const windowWidth = windowSize[0];
   const windowHeight = windowSize[1];
-  
-  // 最適な位置を計算（マウスの少し右下に表示）
-  let x = cursorPosition.x + 10; // マウスから少し右にオフセット
-  let y = cursorPosition.y + 10; // マウスから少し下にオフセット
-  
-  // 画面右端からはみ出す場合は左側に表示
+
+  // Calculate optimal position (prefer bottom-right of cursor)
+  let x = cursorPosition.x + 10;
+  let y = cursorPosition.y + 10;
+
+  // Adjust if window goes off-screen horizontally
   if (x + windowWidth > workArea.x + workArea.width) {
-    x = cursorPosition.x - windowWidth - 10;
+    x = cursorPosition.x - windowWidth - 10; // Move to left
   }
-  
-  // 画面下端からはみ出す場合は上側に表示
+  // Adjust if window goes off-screen vertically
   if (y + windowHeight > workArea.y + workArea.height) {
-    y = cursorPosition.y - windowHeight - 10;
+    y = cursorPosition.y - windowHeight - 10; // Move above
   }
-  
-  // 計算された位置にウィンドウを表示
+
+  // Ensure window stays within work area bounds (final check)
+  x = Math.max(workArea.x, Math.min(x, workArea.x + workArea.width - windowWidth));
+  y = Math.max(workArea.y, Math.min(y, workArea.y + workArea.height - windowHeight));
+
   snippetsWindow.setPosition(x, y);
   snippetsWindow.show();
-  snippetsWindow.webContents.send('load-snippets', loadSnippets());
-  // 現在のテーマ状態も送信
-  snippetsWindow.webContents.send('theme-changed', isDarkMode);
+  snippetsWindow.focus(); // Ensure it gets focus
 }
 
-// アプリ準備完了時
-app.whenReady().then(() => {
-  createWindow();
-  
-  // 初期テーマ状態を送信
-  mainWindow.webContents.on('did-finish-load', () => {
-    mainWindow.webContents.send('theme-changed', isDarkMode);
-  });
-  
-  // macOSでの対応
-  app.on('activate', function () {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
-  });
-});
-
-// 全てのウィンドウが閉じられたら終了（ただしmacOSでは例外）
-app.on('window-all-closed', function () {
-  if (process.platform !== 'darwin') app.quit();
-});
-
-// グローバルショートカットの登録関数
+/**
+ * Registers the global shortcut defined in settings.
+ * Unregisters any existing shortcuts first.
+ * Attempts to register alternative shortcuts if the primary one fails,
+ * saving the successful alternative.
+ */
 function registerGlobalShortcut() {
-  // 既存のショートカットを解除
-  globalShortcut.unregisterAll();
-  
-  // 設定からショートカットを読み込み
+  globalShortcut.unregisterAll(); // Clear previous shortcuts
+
   const settings = loadSettings();
-  let shortcut = settings.shortcut || 'Alt+S';
-  
-  // ショートカットの登録試行
-  try {
-    console.log(`Trying to register shortcut ${shortcut}...`);
-    const success = globalShortcut.register(shortcut, showSnippetsWindow);
-    
-    if (!success) {
-      console.error(`Failed to register shortcut ${shortcut}`);
-      
-      // 代替ショートカットのリスト
-      const alternativeShortcuts = ['Ctrl+Shift+Space', 'Alt+Shift+S', 'Ctrl+Alt+S', 'Alt+Z', 'Ctrl+Alt+Z'];
-      
-      // 代替ショートカットを試す
-      let altSuccess = false;
-      for (const altShortcut of alternativeShortcuts) {
-        console.log(`Trying alternative shortcut ${altShortcut}...`);
+  let shortcutToRegister = settings.shortcut || DEFAULT_SETTINGS.shortcut;
+
+  console.log(`Attempting to register shortcut: ${shortcutToRegister}`);
+  let success = globalShortcut.register(shortcutToRegister, showSnippetsWindow);
+
+  if (!success) {
+    console.warn(`Failed to register primary shortcut: ${shortcutToRegister}. Trying alternatives...`);
+    let altSuccess = false;
+    for (const altShortcut of ALTERNATIVE_SHORTCUTS) {
+      console.log(`Trying alternative: ${altShortcut}`);
+      try {
         altSuccess = globalShortcut.register(altShortcut, showSnippetsWindow);
-        
         if (altSuccess) {
-          console.log(`Successfully registered alternative shortcut ${altShortcut}`);
-          
-          // 成功した代替ショートカットを設定に保存
+          console.log(`Successfully registered alternative shortcut: ${altShortcut}`);
           settings.shortcut = altShortcut;
           saveSettings(settings);
-          
-          // メインウィンドウが準備できていれば、通知を送信
+          // Notify renderer process about the automatically changed shortcut
           if (mainWindow && !mainWindow.isDestroyed()) {
             mainWindow.webContents.send('settings-updated', settings);
           }
-          
-          break;
+          shortcutToRegister = altShortcut; // Update the registered shortcut
+          break; // Stop trying alternatives
         }
+      } catch (altError) {
+          console.error(`Error registering alternative shortcut ${altShortcut}:`, altError);
       }
-      
-      // すべての代替ショートカットも失敗した場合の処理
-      if (!altSuccess) {
-        console.error('Failed to register any shortcut. Please use the tray icon.');
-      }
-    } else {
-      console.log(`Successfully registered shortcut ${shortcut}`);
     }
-  } catch (error) {
-    console.error(`Shortcut registration error:`, error);
-    
-    // If an error occurs, guide to use tray icon
-    console.error('Error occurred during shortcut registration. Please use the tray icon.');
+
+    if (!altSuccess) {
+      console.error('Failed to register any shortcut. Please use the tray icon or configure a different shortcut in settings.');
+      // Consider showing a dialog to the user here
+      // dialog.showErrorBox('Shortcut Registration Failed', 'Could not register any global shortcut. Please use the tray icon or configure a different shortcut in the settings.');
+    }
+  } else {
+    console.log(`Successfully registered shortcut: ${shortcutToRegister}`);
   }
 }
 
-// スニペットを選択したときの処理
-ipcMain.on('snippet-selected', (event, snippetContent) => {
-  // クリップボードにコピー
-  clipboard.writeText(snippetContent);
-  
-  // スニペットウィンドウを非表示
-  snippetsWindow.hide();
-  
-  // 通知を表示
-  const { Notification } = require('electron');
-  new Notification({
-    title: 'Snippet copied',
-    body: 'Press Ctrl+V (or Command+V) to paste anywhere.',
-    icon: path.join(__dirname, 'icon.png')
-  }).show();
+app.whenReady().then(() => {
+  mainWindow = createMainWindow();
+  snippetsWindow = createSnippetsWindow(); // Create hidden window on startup
+  setupTray();
+  setupThemeHandling();
+  registerGlobalShortcut(); // Register initial shortcut
+
+  // macOS: Recreate window if dock icon is clicked and no windows are open
+  app.on('activate', () => {
+    if (BrowserWindow.getAllWindows().length === 0) {
+      mainWindow = createMainWindow();
+      // Re-create snippets window as well if needed, or ensure it exists
+      if (!snippetsWindow || snippetsWindow.isDestroyed()) {
+          snippetsWindow = createSnippetsWindow();
+      }
+    } else if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.show(); // Show existing main window
+    }
+  });
 });
 
-// 新しいスニペットの追加・更新
+// Quit when all windows are closed (except on macOS)
+app.on('window-all-closed', () => {
+  if (process.platform !== 'darwin') {
+    app.quit();
+  }
+});
+
+// Unregister shortcuts before quitting
+app.on('will-quit', () => {
+  globalShortcut.unregisterAll();
+});
+
+/**
+ * Handles the 'snippet-selected' event from the snippets window.
+ * Copies the selected snippet content to the clipboard and hides the window.
+ * @param {Electron.IpcMainEvent} event - The IPC event object.
+ * @param {string} snippetContent - The content of the selected snippet.
+ */
+ipcMain.on('snippet-selected', (event, snippetContent) => {
+  clipboard.writeText(snippetContent);
+  if (snippetsWindow && !snippetsWindow.isDestroyed()) {
+    snippetsWindow.hide();
+  }
+});
+
+/**
+ * Handles the 'save-snippet' event from the main window.
+ * Saves or updates a snippet in the snippets file and notifies the main window.
+ * @param {Electron.IpcMainEvent} event - The IPC event object.
+ * @param {object} snippet - The snippet object to save (may have null/undefined id for new snippets).
+ */
 ipcMain.on('save-snippet', (event, snippet) => {
   const snippets = loadSnippets();
-  
-  // 既存のスニペットの更新または新規追加
-  const existingIndex = snippets.findIndex(s => s.id === snippet.id);
+  const existingIndex = snippet.id !== null && snippet.id !== undefined
+    ? snippets.findIndex(s => s.id === snippet.id)
+    : -1;
+
   if (existingIndex >= 0) {
-    snippets[existingIndex] = snippet;
+    // Update existing snippet
+    snippets[existingIndex] = { ...snippets[existingIndex], ...snippet }; // Merge properties
   } else {
-    // 新規追加の場合は新しいIDを割り当て
-    snippet.id = Math.max(0, ...snippets.map(s => s.id)) + 1;
+    // Add new snippet with a new ID
+    // Ensure ID is unique and numeric
+    const maxId = snippets.reduce((max, s) => Math.max(max, typeof s.id === 'number' ? s.id : 0), 0);
+    snippet.id = maxId + 1;
     snippets.push(snippet);
   }
-  
+
   saveSnippets(snippets);
-  mainWindow.webContents.send('snippets-updated', snippets);
+  // Notify the main window renderer process that snippets have been updated
+  if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('snippets-updated', snippets);
+  }
 });
 
-// スニペットの削除
+/**
+ * Handles the 'delete-snippet' event from the main window.
+ * Deletes a snippet from the snippets file and notifies the main window.
+ * @param {Electron.IpcMainEvent} event - The IPC event object.
+ * @param {number} snippetId - The ID of the snippet to delete.
+ */
 ipcMain.on('delete-snippet', (event, snippetId) => {
-  const snippets = loadSnippets().filter(s => s.id !== snippetId);
+  let snippets = loadSnippets();
+  snippets = snippets.filter(s => s.id !== snippetId);
   saveSnippets(snippets);
-  mainWindow.webContents.send('snippets-updated', snippets);
+  // Notify the main window renderer process
+  if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('snippets-updated', snippets);
+  }
 });
 
-// スニペットの取得要求
+/**
+ * Handles the 'get-snippets' request from the main window's renderer process.
+ * Sends the current list of snippets and theme state back.
+ * @param {Electron.IpcMainEvent} event - The IPC event object.
+ */
 ipcMain.on('get-snippets', (event) => {
   const snippets = loadSnippets();
   event.sender.send('snippets-updated', snippets);
-  // 現在のテーマ状態も送信
+  // Send current theme state as well, as the window might have just loaded
   event.sender.send('theme-changed', isDarkMode);
 });
 
-// 設定の取得要求
+/**
+ * Handles the 'get-settings' request from the main window's renderer process.
+ * Sends the current settings back.
+ * @param {Electron.IpcMainEvent} event - The IPC event object.
+ */
 ipcMain.on('get-settings', (event) => {
   const settings = loadSettings();
   event.sender.send('settings-updated', settings);
 });
 
-// ショートカット設定の更新
-ipcMain.on('update-shortcut', (event, shortcut) => {
+/**
+ * Handles the 'update-shortcut' request from the main window's renderer process.
+ * Attempts to register the new shortcut. If successful, saves it.
+ * If registration fails, attempts to revert to the old shortcut and notifies the renderer.
+ * @param {Electron.IpcMainEvent} event - The IPC event object.
+ * @param {string} newShortcut - The new shortcut string (e.g., 'Alt+S').
+ */
+ipcMain.on('update-shortcut', (event, newShortcut) => {
   const settings = loadSettings();
-  const oldShortcut = settings.shortcut;
-  settings.shortcut = shortcut;
-  saveSettings(settings);
-  
-  // 既存のショートカットを解除
+  const oldShortcut = settings.shortcut || DEFAULT_SETTINGS.shortcut;
+  let updateSuccess = false;
+  let finalShortcut = oldShortcut; // Assume failure initially
+
+  // Unregister all shortcuts before trying the new one
   globalShortcut.unregisterAll();
-  
-  // 新しいショートカットを登録してみる
+
   try {
-    const success = globalShortcut.register(shortcut, showSnippetsWindow);
-    
-    if (success) {
-      // 成功した場合
-      console.log(`Successfully registered shortcut "${shortcut}"`);
-      
-      // 設定の更新を通知
-      mainWindow.webContents.send('settings-updated', settings);
-      
-      // 成功メッセージを送信
-      event.sender.send('shortcut-updated', { success: true, shortcut });
-    } else {
-      // 失敗した場合は元のショートカットに戻す
-      console.error(`Failed to register shortcut "${shortcut}"`);
-      
-      // 元のショートカットを再設定
-      settings.shortcut = oldShortcut;
+    console.log(`Attempting to update shortcut to: ${newShortcut}`);
+    const registrationSuccess = globalShortcut.register(newShortcut, showSnippetsWindow);
+
+    if (registrationSuccess) {
+      console.log(`Successfully updated shortcut to: ${newShortcut}`);
+      settings.shortcut = newShortcut;
       saveSettings(settings);
-      
-      // 元のショートカットを登録し直す
-      registerGlobalShortcut();
-      
-      // 失敗メッセージを送信
-      event.sender.send('shortcut-updated', { success: false, shortcut });
+      updateSuccess = true;
+      finalShortcut = newShortcut;
+    } else {
+      console.warn(`Failed to register new shortcut: ${newShortcut}. Reverting to ${oldShortcut}.`);
+      // Attempt to re-register the old shortcut
+      try {
+          globalShortcut.register(oldShortcut, showSnippetsWindow);
+          console.log(`Successfully re-registered old shortcut: ${oldShortcut}`);
+      } catch (revertError) {
+          console.error(`Failed to re-register old shortcut ${oldShortcut} after new one failed:`, revertError);
+          // At this point, no shortcut might be registered.
+          finalShortcut = null; // Indicate no shortcut is active
+      }
     }
   } catch (error) {
-    console.error(`ショートカット登録エラー:`, error);
-    
-    // 元のショートカットを再設定
-    settings.shortcut = oldShortcut;
-    saveSettings(settings);
-    
-    // 元のショートカットを登録し直す
-    registerGlobalShortcut();
-    
-    // 失敗メッセージを送信
-    event.sender.send('shortcut-updated', { success: false, shortcut });
+    console.error(`Error updating shortcut to ${newShortcut}:`, error);
+    // Attempt to re-register the old shortcut in case of any error during update
+    try {
+        globalShortcut.register(oldShortcut, showSnippetsWindow);
+        console.log(`Successfully re-registered old shortcut ${oldShortcut} after error.`);
+    } catch (revertError) {
+        console.error(`Failed to re-register old shortcut ${oldShortcut} after error:`, revertError);
+        finalShortcut = null; // Indicate no shortcut is active
+    }
+  }
+
+  // Notify the renderer of the outcome
+  event.sender.send('shortcut-updated', { success: updateSuccess, shortcut: finalShortcut });
+  // Also send the potentially updated settings object
+  if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('settings-updated', loadSettings());
   }
 });
