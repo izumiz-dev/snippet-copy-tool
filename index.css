@@ -215,6 +215,10 @@ body {
 .snippet-item-preview {
   color: var(--text-secondary);
   font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
 }
 
 .snippet-item-meta {
