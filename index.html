@@ -190,8 +190,12 @@
      * Displays an empty state message if no snippets are available.
      */
     function renderSnippetList() {
-      snippetListElement.innerHTML = '';
-      const snippetsToRender = searchInput.value ? filteredSnippets : snippets;
+      snippetListElement.innerHTML = ''; // Clear existing items
+      let snippetsToRender = searchInput.value ? filteredSnippets : snippets;
+
+      // Sort snippets by lastUsed timestamp (descending - most recent first)
+      // Snippets without lastUsed are treated as oldest (timestamp 0)
+      snippetsToRender = [...snippetsToRender].sort((a, b) => (b.lastUsed || 0) - (a.lastUsed || 0));
 
       if (snippetsToRender.length === 0) {
         const emptyMessage = document.createElement('div');
@@ -376,14 +380,17 @@
     // IPC Event Handlers
     /**
      * Handles the 'snippets-updated' event from the main process.
-     * Updates the local snippets array and re-renders the list.
+     * Updates the local snippets array, re-sorts, and re-renders the list.
      * Also handles cases where the currently selected snippet might have been deleted.
      */
     ipcRenderer.on('snippets-updated', (event, updatedSnippets) => {
-      snippets = updatedSnippets;
+      snippets = updatedSnippets; // Update the main snippets array
 
+      // Re-filter if search is active, otherwise render the full sorted list
       if (searchInput.value) {
-        filterSnippets(searchInput.value);
+        filterSnippets(searchInput.value); // filterSnippets calls renderSnippetList which now sorts
+      } else {
+        renderSnippetList(); // Render the full list, now sorted
       }
 
       if (selectedSnippet) {

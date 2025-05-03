@@ -103,11 +103,16 @@
      */
     ipcRenderer.on('load-snippets', (event, snippets) => {
       const container = document.getElementById('snippets-container');
-      container.innerHTML = '';
+      container.innerHTML = ''; // Clear existing items
+
+      // Sort snippets by lastUsed timestamp (descending - most recent first)
+      // Snippets without lastUsed are treated as oldest (timestamp 0)
+      snippets.sort((a, b) => (b.lastUsed || 0) - (a.lastUsed || 0));
 
       snippets.forEach(snippet => {
         const item = document.createElement('div');
         item.className = 'snippet-item';
+        item.setAttribute('data-snippet-id', snippet.id); // Store ID for reference
 
         const title = document.createElement('div');
         title.className = 'snippet-title';
@@ -121,7 +126,8 @@
         item.appendChild(preview);
 
         item.addEventListener('click', () => {
-          ipcRenderer.send('snippet-selected', snippet.content);
+          // Send both id and content
+          ipcRenderer.send('snippet-selected', { id: snippet.id, content: snippet.content });
         });
 
         container.appendChild(item);

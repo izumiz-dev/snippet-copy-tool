@@ -387,12 +387,35 @@ app.on('will-quit', () => {
 
 /**
  * Handles the 'snippet-selected' event from the snippets window.
- * Copies the selected snippet content to the clipboard and hides the window.
+ * Copies the selected snippet content to the clipboard, updates its last used time,
+ * saves the snippets, and hides the window.
  * @param {Electron.IpcMainEvent} event - The IPC event object.
- * @param {string} snippetContent - The content of the selected snippet.
+ * @param {{id: number, content: string}} selectedSnippet - The selected snippet object containing id and content.
  */
-ipcMain.on('snippet-selected', (event, snippetContent) => {
-  clipboard.writeText(snippetContent);
+ipcMain.on('snippet-selected', (event, selectedSnippet) => {
+  if (!selectedSnippet || typeof selectedSnippet.id === 'undefined' || typeof selectedSnippet.content !== 'string') {
+      console.error('Invalid data received for snippet-selected:', selectedSnippet);
+      return;
+  }
+
+  clipboard.writeText(selectedSnippet.content);
+
+  // Update lastUsed timestamp
+  const snippets = loadSnippets();
+  const snippetIndex = snippets.findIndex(s => s.id === selectedSnippet.id);
+  if (snippetIndex !== -1) {
+      snippets[snippetIndex].lastUsed = Date.now();
+      saveSnippets(snippets); // Save updated snippets with timestamp
+
+      // Optionally notify the main window if it's open
+      if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('snippets-updated', snippets);
+      }
+  } else {
+      console.warn(`Snippet with ID ${selectedSnippet.id} not found for timestamp update.`);
+  }
+
+
   if (snippetsWindow && !snippetsWindow.isDestroyed()) {
     snippetsWindow.hide();
   }
