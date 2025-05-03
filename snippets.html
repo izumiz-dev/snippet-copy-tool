@@ -103,7 +103,7 @@
      */
     ipcRenderer.on('load-snippets', (event, snippets) => {
       const container = document.getElementById('snippets-container');
-      container.innerHTML = ''; // Clear existing items
+      container.innerHTML = '';
 
       // Sort snippets by lastUsed timestamp (descending - most recent first)
       // Snippets without lastUsed are treated as oldest (timestamp 0)
@@ -112,7 +112,7 @@
       snippets.forEach(snippet => {
         const item = document.createElement('div');
         item.className = 'snippet-item';
-        item.setAttribute('data-snippet-id', snippet.id); // Store ID for reference
+        item.setAttribute('data-snippet-id', snippet.id);
 
         const title = document.createElement('div');
         title.className = 'snippet-title';
@@ -125,10 +125,14 @@
         item.appendChild(title);
         item.appendChild(preview);
 
+        // Set native title attribute for simple tooltip (first 5 lines)
+        const previewLines = snippet.content.split('\n').slice(0, 5).join('\n');
+        item.setAttribute('title', previewLines);
+
         item.addEventListener('click', () => {
-          // Send both id and content
           ipcRenderer.send('snippet-selected', { id: snippet.id, content: snippet.content });
         });
+
 
         container.appendChild(item);
       });
@@ -143,6 +147,7 @@
     ipcRenderer.on('theme-changed', (event, isDarkMode) => {
       document.body.classList.remove('light-mode', 'dark-mode');
       document.body.classList.add(isDarkMode ? 'dark-mode' : 'light-mode');
+
     });
   </script>
 </body>
