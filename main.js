@@ -168,6 +168,15 @@ function createSnippetsWindow() {
 
   win.loadFile('snippets.html');
 
+  // Add listener for Escape key to hide the window
+  win.webContents.on('before-input-event', (event, input) => {
+    // Check if the key pressed is Escape and the window is visible
+    if (input.type === 'keyUp' && input.key === 'Escape' && win.isVisible()) {
+      win.hide();
+      event.preventDefault(); // Prevent default behavior if necessary
+    }
+  });
+
   // Hide the window when it loses focus
   win.on('blur', () => {
     if (win && !win.isDestroyed()) {
